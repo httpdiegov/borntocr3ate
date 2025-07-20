@@ -1,4 +1,3 @@
-import ApiKeyManager from "@/components/dashboard/api-key-manager";
 import Ideari from "@/components/dashboard/ideari";
 import NewsBrief from "@/components/dashboard/news-brief";
 import SocialNetworks from "@/components/dashboard/social-networks";
@@ -14,9 +13,8 @@ export default function Home() {
         </div>
         <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
           <NewsBrief />
-          <ApiKeyManager />
-          <Ideari />
           <SocialNetworks />
+          <Ideari />
         </div>
       </main>
     </div>
