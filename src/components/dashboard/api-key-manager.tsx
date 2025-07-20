@@ -222,7 +222,7 @@ export default function ApiKeyManager({ className }: { className?: string }) {
                       id={key}
                       type={isVisible ? "text" : "password"}
                       placeholder="Key not set..."
-                      value={hasValue && !displayValue && !isVisible ? '••••••••••' : displayValue}
+                      value={isVisible ? displayValue : (hasValue ? '••••••••••' : '')}
                       onChange={(e) => handleInputChange(key, e.target.value)}
                       disabled={isLoading}
                     />
