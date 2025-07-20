@@ -2,6 +2,7 @@ import ApiKeyManager from "@/components/dashboard/api-key-manager";
 import Ideari from "@/components/dashboard/ideari";
 import NewsBrief from "@/components/dashboard/news-brief";
 import SocialNetworks from "@/components/dashboard/social-networks";
+import VideoClipper from "@/components/dashboard/video-clipper";
 
 export default function Home() {
   return (
@@ -12,11 +13,18 @@ export default function Home() {
             Vision Board
           </h1>
         </div>
-        <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
-          <NewsBrief />
-          <SocialNetworks />
-          <Ideari />
-          <ApiKeyManager />
+        <div className="grid gap-6 grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
+          <div className="xl:col-span-1 grid gap-6">
+            <NewsBrief />
+            <Ideari />
+          </div>
+          <div className="xl:col-span-1 grid gap-6">
+            <SocialNetworks />
+            <VideoClipper />
+          </div>
+          <div className="xl:col-span-1">
+            <ApiKeyManager />
+          </div>
         </div>
       </main>
     </div>
