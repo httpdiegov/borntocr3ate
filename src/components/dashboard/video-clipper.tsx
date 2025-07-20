@@ -11,12 +11,19 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Film, Bot, Loader2, Scissors, WholeWord, UploadCloud } from "lucide-react";
+import { Film, Bot, Loader2, Scissors, WholeWord } from "lucide-react";
 import { transcribeVideo } from "@/ai/flows/transcribe-video";
 import { analyzeVideoContent, type AnalyzedClip } from "@/ai/flows/analyze-video-content";
 import { generateUploadUrl } from "@/ai/flows/generate-upload-url";
 import { Badge } from "../ui/badge";
 import { Textarea } from "../ui/textarea";
+
+const sanitizeFilename = (filename: string): string => {
+  return filename
+    .replace(/\s+/g, '_') // Replace spaces with underscores
+    .replace(/[^a-zA-Z0-9._-]/g, ''); // Remove invalid characters
+};
+
 
 export default function VideoClipper({ className }: { className?: string }) {
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -56,10 +63,12 @@ export default function VideoClipper({ className }: { className?: string }) {
     setIsUploading(true);
     toast({ title: "Preparing secure upload...", description: "This is the recommended way for large files." });
     let gcsUri: string;
+    
+    const safeFilename = sanitizeFilename(videoFile.name);
 
     try {
       const { signedUrl, gcsUri: resultGcsUri } = await generateUploadUrl({
-        filename: videoFile.name,
+        filename: safeFilename,
         contentType: videoFile.type,
       });
       gcsUri = resultGcsUri;
@@ -102,11 +111,11 @@ export default function VideoClipper({ className }: { className?: string }) {
         });
         setTranscription(result.transcription);
         toast({ title: "Transcription complete!", description: "You can now analyze the text to find clips."});
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error transcribing video:", error);
         toast({
           title: "Transcription Error",
-          description: "Could not transcribe the video. Check the console for details.",
+          description: error.message || "Could not transcribe the video. Check the console for details.",
           variant: "destructive",
         });
     } finally {
@@ -136,11 +145,11 @@ export default function VideoClipper({ className }: { className?: string }) {
         description: `Identified ${result.clips.length} potential clips.`,
       });
 
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error analyzing video:", error);
       toast({
         title: "Analysis Error",
-        description: "Could not generate clips.",
+        description: error.message || "Could not generate clips.",
         variant: "destructive",
       });
     } finally {
