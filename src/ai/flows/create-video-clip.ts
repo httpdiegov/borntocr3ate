@@ -69,7 +69,7 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
         cropFilter = 'crop=ih*9/16:ih:0:0'; 
         break;
       case 'derecha':
-        // Crop the right third of the video. x = 1920 - (width of crop)
+        // Crop the right third of the video. x = iw - (width of crop)
         cropFilter = 'crop=ih*9/16:ih:iw-ih*9/16:0';
         break;
       case 'centro':
@@ -79,8 +79,8 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
         break;
     }
 
-    // 3. Construct the ffmpeg command
-    const ffmpegCommand = `ffmpeg -i "${originalVideoPath}" -ss ${startTime} -t ${duration} -vf "${cropFilter}" -an "${outputClipPath}"`;
+    // 3. Construct the ffmpeg command. It now includes audio.
+    const ffmpegCommand = `ffmpeg -ss ${startTime} -i "${originalVideoPath}" -t ${duration} -vf "${cropFilter}" -c:a copy "${outputClipPath}"`;
     console.log(`Generated ffmpeg command: ${ffmpegCommand}`);
 
     // 4. Execute the ffmpeg command
