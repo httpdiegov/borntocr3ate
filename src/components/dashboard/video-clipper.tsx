@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Film, Bot, Loader2, Scissors, User, Clock, Wand, Download, Settings, Users } from "lucide-react";
+import { Film, Bot, Loader2, Scissors, User, Clock, Wand, Download, Settings, Users, CheckCircle } from "lucide-react";
 import { analyzeVideoContent, type AnalyzedClip, type Speaker } from "@/ai/flows/analyze-video-content";
 import { generateUploadUrl, type GenerateUploadUrlOutput } from "@/ai/flows/generate-upload-url";
 import { finalizeUpload } from "@/ai/flows/finalize-upload";
@@ -41,7 +41,7 @@ type AnalysisState = {
 type ClipProcessingState = {
   [clipId: string]: {
     isLoading: boolean;
-    resultUrl?: string;
+    resultPath?: string;
     ffmpegCommand?: string;
   };
 };
@@ -112,9 +112,9 @@ function SmartClipperTab() {
 
     try {
       const result = await createVideoClip({ videoUrl: analysisResult.videoInfo.publicUrl, startTime: clip.startTime, endTime: clip.endTime, speaker: speaker, clipTitle: clip.title });
-      if (result.success && result.videoDataUri) {
-        setClipProcessingState(prev => ({ ...prev, [clip.id]: { isLoading: false, resultUrl: result.videoDataUri, ffmpegCommand: result.ffmpegCommand } }));
-        toast({ title: "¡Clip Creado!", description: "El clip está listo para descargar." });
+      if (result.success && result.filePath) {
+        setClipProcessingState(prev => ({ ...prev, [clip.id]: { isLoading: false, resultPath: result.filePath, ffmpegCommand: result.ffmpegCommand } }));
+        toast({ title: "¡Clip Guardado!", description: `El clip se ha guardado en: ${result.filePath}` });
       } else {
         throw new Error(result.message);
       }
@@ -162,16 +162,17 @@ function SmartClipperTab() {
                   <p className="text-sm text-muted-foreground break-words w-full">{clip.summary}</p>
                   {speaker && <Badge variant="outline"><User className="h-3 w-3 mr-1.5" />Enfocar en: {speaker.description} ({speaker.position})</Badge>}
                   <div className="flex gap-2 pt-2">
-                    <Button size="sm" variant="outline" className="w-full" disabled={clipState.isLoading} onClick={() => handleCreateClip(clip)}>
-                      {clipState.isLoading ? <Loader2 className="animate-spin mr-2" /> : <Scissors className="mr-2 h-4 w-4" />}
-                      {clipState.isLoading ? "Procesando..." : "Crear Clip con FFMPEG"}
+                    <Button size="sm" variant="outline" className="w-full" disabled={clipState.isLoading || !!clipState.resultPath} onClick={() => handleCreateClip(clip)}>
+                      {clipState.isLoading ? <Loader2 className="animate-spin mr-2" /> : (clipState.resultPath ? <CheckCircle className="mr-2 h-4 w-4 text-green-500" /> : <Scissors className="mr-2 h-4 w-4" />)}
+                      {clipState.isLoading ? "Procesando..." : (clipState.resultPath ? "¡Guardado!" : "Crear Clip con FFMPEG")}
                     </Button>
                   </div>
-                  {clipState.resultUrl && (
-                    <div className="pt-2 space-y-2">
-                      <video controls src={clipState.resultUrl} className="w-full rounded-md" />
-                      <Button size="sm" asChild className="w-full"><a href={clipState.resultUrl} download={`${clip.title}.mp4`}><Download className="mr-2 h-4 w-4" />Descargar Clip</a></Button>
-                    </div>
+                  {clipState.resultPath && (
+                    <Card className="mt-2 text-center bg-green-950/50 border-green-500/20">
+                      <CardContent className="p-3">
+                         <p className="text-sm text-green-300">Video guardado en la carpeta `videos` de tu proyecto.</p>
+                      </CardContent>
+                    </Card>
                   )}
                   {clipState.ffmpegCommand && (
                     <Card className="mt-2"><CardHeader className="p-2"><CardTitle className="text-sm">Comando FFMPEG Generado</CardTitle></CardHeader><CardContent className="p-2"><pre className="text-xs bg-muted p-2 rounded-md overflow-x-auto"><code>{clipState.ffmpegCommand}</code></pre></CardContent></Card>
@@ -196,7 +197,7 @@ function ManualReframeTab() {
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [speakerPosition, setSpeakerPosition] = useState<"izquierda" | "centro" | "derecha">("centro");
   const [isLoading, setIsLoading] = useState(false);
-  const [result, setResult] = useState<{ url: string; command: string } | null>(null);
+  const [result, setResult] = useState<{ path: string; command: string } | null>(null);
   const { toast } = useToast();
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -245,9 +246,9 @@ function ManualReframeTab() {
         clipTitle: `reframed_${videoFile.name}`
       });
 
-      if (clipResult.success && clipResult.videoDataUri) {
-        setResult({ url: clipResult.videoDataUri, command: clipResult.ffmpegCommand });
-        toast({ title: "¡Reencuadre Completo!", description: "El clip vertical está listo." });
+      if (clipResult.success && clipResult.filePath) {
+        setResult({ path: clipResult.filePath, command: clipResult.ffmpegCommand });
+        toast({ title: "¡Reencuadre Completo!", description: `El clip vertical ha sido guardado en ${clipResult.filePath}` });
       } else {
         throw new Error(clipResult.message);
       }
@@ -291,13 +292,12 @@ function ManualReframeTab() {
 
       {result && (
         <div className="pt-2 space-y-2">
-          <video controls src={result.url} className="w-full rounded-md" />
-          <Button size="sm" asChild className="w-full">
-            <a href={result.url} download={`reframed_${videoFile?.name || 'clip'}.mp4`}>
-              <Download className="mr-2 h-4 w-4" />
-              Descargar Clip Vertical
-            </a>
-          </Button>
+            <Card className="mt-2 text-center bg-green-950/50 border-green-500/20">
+                <CardContent className="p-3">
+                    <p className="text-sm text-green-300">¡Video guardado!</p>
+                    <p className="text-xs text-muted-foreground">{`Lo encontrarás en: ${result.path}`}</p>
+                </CardContent>
+            </Card>
           <Card className="mt-2">
             <CardHeader className="p-2"><CardTitle className="text-sm">Comando FFMPEG Generado</CardTitle></CardHeader>
             <CardContent className="p-2"><pre className="text-xs bg-muted p-2 rounded-md overflow-x-auto"><code>{result.command}</code></pre></CardContent>

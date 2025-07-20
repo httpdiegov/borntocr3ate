@@ -30,7 +30,7 @@ export type CreateVideoClipInput = z.infer<typeof CreateVideoClipInputSchema>;
 const CreateVideoClipOutputSchema = z.object({
     success: z.boolean(),
     message: z.string(),
-    videoDataUri: z.string().optional().describe("The generated video clip as a data URI (data:video/mp4;base64,...)."),
+    filePath: z.string().optional().describe("The local path where the video was saved."),
     ffmpegCommand: z.string().describe("The ffmpeg command that was generated.")
 });
 export type CreateVideoClipOutput = z.infer<typeof CreateVideoClipOutputSchema>;
@@ -41,11 +41,16 @@ export type CreateVideoClipOutput = z.infer<typeof CreateVideoClipOutputSchema>;
 async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipOutput> {
   const { videoUrl, startTime, endTime, speaker, clipTitle } = input;
   
-  // Create temporary file paths
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'clip-'));
+  // Create temporary file path for the original download
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'clip-download-'));
   const originalVideoPath = path.join(tempDir, 'original.mp4');
+
+  // Define the output directory and ensure it exists
+  const videosDir = path.join(process.cwd(), 'videos');
+  fs.mkdirSync(videosDir, { recursive: true });
+  
   const safeClipTitle = clipTitle.replace(/[^a-zA-Z0-9_-]/g, '_');
-  const outputClipPath = path.join(tempDir, `${safeClipTitle}.mp4`);
+  const outputClipPath = path.join(videosDir, `${safeClipTitle}.mp4`);
   
   try {
     // 1. Download the original video file
@@ -80,7 +85,7 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
     }
 
     // 3. Construct the ffmpeg command. It now includes audio.
-    const ffmpegCommand = `ffmpeg -ss ${startTime} -i "${originalVideoPath}" -t ${duration} -vf "${cropFilter}" -c:a copy "${outputClipPath}"`;
+    const ffmpegCommand = `ffmpeg -y -ss ${startTime} -i "${originalVideoPath}" -t ${duration} -vf "${cropFilter}" -c:a copy "${outputClipPath}"`;
     console.log(`Generated ffmpeg command: ${ffmpegCommand}`);
 
     // 4. Execute the ffmpeg command
@@ -104,15 +109,11 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
         throw new Error("ffmpeg command did not produce an output file.");
     }
     
-    // 5. Read the output file and convert to a data URI
-    const videoResultBuffer = fs.readFileSync(outputClipPath);
-    const videoDataUri = `data:video/mp4;base64,${videoResultBuffer.toString('base64')}`;
-
-    console.log(`Successfully created clip: ${outputClipPath}`);
+    console.log(`Successfully created clip and saved to: ${outputClipPath}`);
     return { 
         success: true, 
-        message: 'Clip created successfully!',
-        videoDataUri,
+        message: `Clip created successfully! Saved to ${outputClipPath}`,
+        filePath: outputClipPath,
         ffmpegCommand
     };
 
@@ -120,7 +121,7 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
     console.error('Failed to create video clip:', error);
     return { success: false, message: `Failed to create clip: ${error.message}`, ffmpegCommand: 'Error generating command.' };
   } finally {
-    // Clean up temporary files
+    // Clean up temporary downloaded file
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 }
