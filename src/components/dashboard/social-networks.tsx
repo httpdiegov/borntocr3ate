@@ -15,6 +15,7 @@ import Image from "next/image";
 import { YoutubeIcon } from "../icons/youtube-icon";
 import { InstagramIcon } from "../icons/instagram-icon";
 import { getYoutubeStats, type GetYoutubeStatsOutput } from "@/ai/flows/get-youtube-stats";
+import { getInstagramStats, type GetInstagramStatsOutput } from "@/ai/flows/get-instagram-stats";
 
 type SocialAccount = {
   platform: "YouTube" | "Instagram";
@@ -131,38 +132,98 @@ const YouTubeStats: React.FC<{ handle: string }> = ({ handle }) => {
 }
 
 const InstagramStats: React.FC<{ handle: string }> = ({ handle }) => {
-    return (
-      <div className="flex flex-col items-center w-full">
-        <Image
-          src="https://placehold.co/80x80.png"
-          data-ai-hint="logo"
-          alt={`Instagram profile picture`}
-          width={80}
-          height={80}
-          className="rounded-full border-2 border-primary"
-        />
-        <div className="flex items-center gap-2 mt-2">
-          <InstagramIcon className="h-6 w-6" />
-          <h3 className="text-xl font-bold">Your Account</h3>
-        </div>
-        <p className="text-muted-foreground">{handle}</p>
-        <div className="grid grid-cols-3 justify-around w-full my-4 text-center">
-            <div key="Followers">
-              <p className="text-2xl font-bold">1.2M</p>
-              <p className="text-sm text-muted-foreground">Followers</p>
+    const [stats, setStats] = useState<GetInstagramStatsOutput | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [isMounted, setIsMounted] = useState(false);
+
+    useEffect(() => {
+        setIsMounted(true);
+    }, []);
+
+    useEffect(() => {
+        if (!isMounted) return;
+
+        const fetchStats = async () => {
+            setLoading(true);
+            setError(null);
+            setStats(null);
+            try {
+                let accessToken: string | undefined;
+                const storedKeys = localStorage.getItem("apiKeys");
+                if (storedKeys) {
+                    const keys: ApiKey[] = JSON.parse(storedKeys);
+                    accessToken = keys.find(k => k.service === 'instagram_access_token')?.key;
+                }
+
+                if (!accessToken) {
+                    throw new Error("Instagram Access Token not found. Please add it in the API Key Manager with the service name 'instagram_access_token'.");
+                }
+                const result = await getInstagramStats({ accessToken });
+                setStats(result);
+
+            } catch (e: any) {
+                setError(e.message || "Failed to fetch Instagram stats.");
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchStats();
+    }, [handle, isMounted]);
+
+    if (!isMounted || loading) {
+        return (
+            <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                <Loader className="h-8 w-8 animate-spin" />
+                <p className="mt-2">Loading account data...</p>
             </div>
-             <div key="Following">
-              <p className="text-2xl font-bold">345</p>
-              <p className="text-sm text-muted-foreground">Following</p>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="flex flex-col items-center justify-center h-full text-destructive text-center">
+                <AlertTriangle className="h-8 w-8" />
+                <p className="mt-2 font-semibold">Error</p>
+                <p className="text-sm">{error}</p>
             </div>
-             <div key="Posts">
-              <p className="text-2xl font-bold">587</p>
-              <p className="text-sm text-muted-foreground">Posts</p>
+        );
+    }
+
+    if (stats) {
+        return (
+            <div className="flex flex-col items-center w-full">
+                <Image
+                  src={stats.profilePicUrl}
+                  data-ai-hint="logo"
+                  alt={`${stats.username} profile picture`}
+                  width={80}
+                  height={80}
+                  className="rounded-full border-2 border-primary"
+                />
+                <div className="flex items-center gap-2 mt-2">
+                    <InstagramIcon className="h-6 w-6" />
+                    <h3 className="text-xl font-bold">{stats.username}</h3>
+                </div>
+                <p className="text-muted-foreground">@{stats.username}</p>
+                <div className="grid grid-cols-2 justify-around w-full my-4 text-center">
+                    <div key="Followers">
+                        <p className="text-2xl font-bold">{stats.followersCount}</p>
+                        <p className="text-sm text-muted-foreground">Followers</p>
+                    </div>
+                    <div key="Posts">
+                        <p className="text-2xl font-bold">{stats.mediaCount}</p>
+                        <p className="text-sm text-muted-foreground">Posts</p>
+                    </div>
+                </div>
             </div>
-        </div>
-      </div>
-    )
+        );
+    }
+
+    return null;
 }
+
 
 const socialAccounts: SocialAccount[] = [
   {
