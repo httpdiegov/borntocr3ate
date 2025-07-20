@@ -25,31 +25,24 @@ export async function accessSecret(secretName: string): Promise<string | undefin
   const projectId = process.env.GCLOUD_PROJECT;
   if (!projectId) {
     console.error('GCLOUD_PROJECT environment variable not set.');
-    return undefined;
+    // Throw an error instead of returning undefined so the issue is obvious.
+    throw new Error('GCLOUD_PROJECT environment variable not set.');
   }
   
   const secretManagerClient = getSecretManagerClient();
 
-  try {
-    const name = `projects/${projectId}/secrets/${secretName}/versions/latest`;
-    console.log(`Attempting to access secret: ${name}`);
-    const [version] = await secretManagerClient.accessSecretVersion({ name });
+  // Removing try-catch to let the actual Google Cloud error surface.
+  // This will give a much more specific error message if something is wrong.
+  const name = `projects/${projectId}/secrets/${secretName}/versions/latest`;
+  console.log(`Attempting to access secret: ${name}`);
+  const [version] = await secretManagerClient.accessSecretVersion({ name });
 
-    const payload = version.payload?.data?.toString();
-    if (payload) {
-      console.log(`Successfully accessed secret '${secretName}'.`);
-    } else {
-      console.warn(`Secret '${secretName}' exists but has no payload/value.`);
-    }
-    return payload;
-  } catch (error: any) {
-    // Gracefully handle cases where the secret or version doesn't exist yet.
-    if (error.code === 5) { // GRPC 'NOT_FOUND' error code
-      console.warn(`SECRET NOT FOUND: Secret '${secretName}' or its 'latest' version not found in project '${projectId}'. Please ensure the secret exists and has at least one enabled version.`);
-    } else {
-      // Log other errors for debugging
-      console.error(`Failed to access secret '${secretName}' in project '${projectId}'. Error:`, error);
-    }
-    return undefined;
+  const payload = version.payload?.data?.toString();
+  if (payload) {
+    console.log(`Successfully accessed secret '${secretName}'.`);
+  } else {
+    // This case should ideally not happen if a version exists, but good to have.
+    console.warn(`Secret '${secretName}' exists but has no payload/value.`);
   }
+  return payload;
 }
