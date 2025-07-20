@@ -11,30 +11,21 @@ import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 import fs from 'fs';
 import path from 'path';
 
-let secretManagerClient: SecretManagerServiceClient;
-
-// This function initializes the client with explicit credentials
-// to ensure authentication works correctly in local development.
-function initializeClient() {
-  if (secretManagerClient) {
-    return;
-  }
-  
+// Helper function to initialize the client just-in-time
+function getSecretManagerClient() {
   const credentialsPath = path.resolve(process.cwd(), 'google-credentials.json');
 
   if (fs.existsSync(credentialsPath)) {
     console.log("Found google-credentials.json, using it for update-api-key flow.");
-    secretManagerClient = new SecretManagerServiceClient({
+    return new SecretManagerServiceClient({
       keyFilename: credentialsPath,
     });
   } else {
     console.log("google-credentials.json not found, using default application credentials for update-api-key flow.");
     // This will work in a deployed Firebase/Google Cloud environment
-    secretManagerClient = new SecretManagerServiceClient();
+    return new SecretManagerServiceClient();
   }
 }
-
-initializeClient();
 
 
 const UpdateApiKeyInputSchema = z.object({
@@ -58,6 +49,7 @@ async function updateApiKeyInSecretManager(input: UpdateApiKeyInput): Promise<Up
     return { success: false, message: 'GCLOUD_PROJECT environment variable not set.' };
   }
 
+  const secretManagerClient = getSecretManagerClient();
   const secretName = input.service;
   const parent = `projects/${projectId}`;
   const secretPath = `${parent}/secrets/${secretName}`;
