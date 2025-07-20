@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState } from "react";
@@ -19,9 +20,8 @@ import { Badge } from "../ui/badge";
 import { Textarea } from "../ui/textarea";
 
 const sanitizeFilename = (filename: string): string => {
-  return filename
-    .replace(/\s+/g, '_') // Replace spaces with underscores
-    .replace(/[^a-zA-Z0-9._-]/g, ''); // Remove invalid characters
+  // Replace spaces and special characters with underscores
+  return filename.replace(/[\s\W]+/g, '_');
 };
 
 
@@ -62,16 +62,16 @@ export default function VideoClipper({ className }: { className?: string }) {
     // 1. Get signed URL for upload
     setIsUploading(true);
     toast({ title: "Preparing secure upload...", description: "This is the recommended way for large files." });
-    let gcsUri: string;
+    let publicUrl: string;
     
     const safeFilename = sanitizeFilename(videoFile.name);
 
     try {
-      const { signedUrl, gcsUri: resultGcsUri } = await generateUploadUrl({
+      const { signedUrl, publicUrl: resultPublicUrl } = await generateUploadUrl({
         filename: safeFilename,
         contentType: videoFile.type,
       });
-      gcsUri = resultGcsUri;
+      publicUrl = resultPublicUrl;
 
       // 2. Upload file directly to GCS
       toast({ title: "Uploading video...", description: "Your file is being uploaded directly to secure storage." });
@@ -84,7 +84,9 @@ export default function VideoClipper({ className }: { className?: string }) {
       });
 
       if (!uploadResponse.ok) {
-        throw new Error('Upload failed. Please try again.');
+        const errorText = await uploadResponse.text();
+        console.error("Upload failed with status:", uploadResponse.status, "and message:", errorText);
+        throw new Error(`Upload failed. Server responded with: ${errorText}`);
       }
       toast({ title: "Upload complete!", description: "Video is now securely stored." });
     } catch (error: any) {
@@ -100,13 +102,13 @@ export default function VideoClipper({ className }: { className?: string }) {
       setIsUploading(false);
     }
     
-    // 3. Transcribe from GCS URI
+    // 3. Transcribe from Public URL
     setIsTranscribing(true);
     toast({ title: "Starting transcription...", description: "The AI is processing the video. This may take a few minutes." });
 
     try {
         const result = await transcribeVideo({ 
-          gcsUri,
+          publicUrl,
           contentType: videoFile.type,
         });
         setTranscription(result.transcription);

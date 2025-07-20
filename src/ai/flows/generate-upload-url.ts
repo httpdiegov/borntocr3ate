@@ -35,7 +35,7 @@ export type GenerateUploadUrlInput = z.infer<typeof GenerateUploadUrlInputSchema
 
 const GenerateUploadUrlOutputSchema = z.object({
   signedUrl: z.string().url().describe('The signed URL for the PUT request.'),
-  gcsUri: z.string().describe('The GCS URI for the uploaded file.'),
+  publicUrl: z.string().url().describe('The public URL of the uploaded file.'),
 });
 export type GenerateUploadUrlOutput = z.infer<typeof GenerateUploadUrlOutputSchema>;
 
@@ -97,13 +97,17 @@ async function generateUrl(input: GenerateUploadUrlInput): Promise<GenerateUploa
     const [url] = await file.getSignedUrl(options);
     console.log(`Generated signed URL for ${input.filename}`);
     
+    // Make the file public so the AI can read it.
+    await file.makePublic();
+    console.log(`Made gs://${bucketName}/${input.filename} public.`);
+    
     return {
       signedUrl: url,
-      gcsUri: `gs://${bucketName}/${input.filename}`,
+      publicUrl: `https://storage.googleapis.com/${bucketName}/${input.filename}`,
     };
   } catch (error: any) {
-    console.error('Failed to generate signed URL:', error);
-    throw new Error(`Could not generate upload URL. Ensure the service account has 'Service Account Token Creator' role. Details: ${error.message}`);
+    console.error('Failed to generate signed URL or make file public:', error);
+    throw new Error(`Could not complete URL generation process. Details: ${error.message}`);
   }
 }
 
