@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Card,
   CardContent,
@@ -56,13 +56,30 @@ export default function ApiKeyManager({ className }: { className?: string }) {
   const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({});
   const { toast } = useToast();
   const [isDialogOpen, setDialogOpen] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+    const storedKeys = localStorage.getItem("apiKeys");
+    if (storedKeys) {
+      setKeys(JSON.parse(storedKeys));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isMounted) {
+      localStorage.setItem("apiKeys", JSON.stringify(keys));
+      keys.forEach(key => {
+        localStorage.setItem(key.service, key.key);
+      });
+    }
+  }, [keys, isMounted]);
 
   const handleAddKey = () => {
     if (service && keyValue) {
-      setKeys([
-        ...keys,
-        { id: crypto.randomUUID(), service: service, key: keyValue },
-      ]);
+      const newKey = { id: crypto.randomUUID(), service, key: keyValue };
+      const updatedKeys = [...keys, newKey];
+      setKeys(updatedKeys);
       setService("");
       setKeyValue("");
       toast({ title: "API Key added successfully." });
@@ -76,8 +93,9 @@ export default function ApiKeyManager({ className }: { className?: string }) {
     }
   };
 
-  const handleDeleteKey = (id: string) => {
+  const handleDeleteKey = (id: string, serviceName: string) => {
     setKeys(keys.filter((key) => key.id !== id));
+    localStorage.removeItem(serviceName);
     toast({ title: "API Key deleted." });
   };
 
@@ -90,6 +108,10 @@ export default function ApiKeyManager({ className }: { className?: string }) {
     setVisibleKeys((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
+  if (!isMounted) {
+    return null; // or a loading skeleton
+  }
+
   return (
     <Card className={className}>
       <CardHeader className="flex flex-row items-center justify-between">
@@ -99,7 +121,7 @@ export default function ApiKeyManager({ className }: { className?: string }) {
             API Key Manager
           </CardTitle>
           <CardDescription>
-            Store and manage your API keys securely.
+            Store and manage your API keys securely in your browser.
           </CardDescription>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setDialogOpen}>
@@ -112,7 +134,7 @@ export default function ApiKeyManager({ className }: { className?: string }) {
             <DialogHeader>
               <DialogTitle>Add New API Key</DialogTitle>
               <DialogDescription>
-                Enter the service name and the API key you want to store.
+                Enter the service name and the API key. It will be stored in your browser's local storage.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
@@ -122,7 +144,7 @@ export default function ApiKeyManager({ className }: { className?: string }) {
                   id="service"
                   value={service}
                   onChange={(e) => setService(e.target.value)}
-                  placeholder="e.g. OpenAI"
+                  placeholder="e.g. youtube_api_key"
                 />
               </div>
               <div className="space-y-2">
@@ -198,7 +220,7 @@ export default function ApiKeyManager({ className }: { className?: string }) {
                         <AlertDialogFooter>
                           <AlertDialogCancel>Cancel</AlertDialogCancel>
                           <AlertDialogAction
-                            onClick={() => handleDeleteKey(apiKey.id)}
+                            onClick={() => handleDeleteKey(apiKey.id, apiKey.service)}
                           >
                             Delete
                           </AlertDialogAction>
