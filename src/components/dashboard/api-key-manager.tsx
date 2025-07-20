@@ -52,7 +52,7 @@ export default function ApiKeyManager({ className }: { className?: string }) {
       if (result.success) {
         toast({
           title: "Success",
-          description: result.message || `${key} has been updated.`,
+          description: result.message || `${name} has been updated.`,
         });
         setKeyValues((prev) => ({...prev, [key]: ''})); // Clear input on success
       } else {
@@ -94,13 +94,13 @@ export default function ApiKeyManager({ className }: { className?: string }) {
                 onChange={(e) => handleInputChange(key, e.target.value)}
                 disabled={!!loadingKey}
               />
-              <Button onClick={() => handleSaveKey(key)} disabled={loadingKey === key || !keyValues[key]}>
+              <Button onClick={() => handleSaveKey(key)} disabled={loadingKey === key || !keyValues[key]} size="icon">
                 {loadingKey === key ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="animate-spin" />
                 ) : (
-                  <Save className="h-4 w-4" />
+                  <Save />
                 )}
-                <span className="sr-only">Save</span>
+                <span className="sr-only">Save {name}</span>
               </Button>
             </div>
           </div>
