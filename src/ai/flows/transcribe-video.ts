@@ -1,12 +1,10 @@
 'use server';
 
 /**
- * @fileOverview A Genkit flow for transcribing video content.
+ * @fileOverview A flow for transcribing video content using a direct API call.
  */
 
 import { z } from 'zod';
-import { genkit } from 'genkit';
-import { googleAI } from '@genkit-ai/googleai';
 import { getApiKey } from '../tools/get-api-key';
 
 // Define the schema for the input: a video file as a data URI and its content type
@@ -29,38 +27,65 @@ export type TranscribeVideoOutput = z.infer<
 >;
 
 export async function transcribeVideo(input: TranscribeVideoInput): Promise<TranscribeVideoOutput> {
-    console.log('Starting video transcription with Gemini 1.5 Flash...');
+    console.log('Starting video transcription with direct API call...');
     
     const apiKey = await getApiKey({ service: 'GEMINI_API_KEY' });
     if (!apiKey) {
       throw new Error('Gemini API key not found in Secret Manager.');
     }
-    
-    // Create a local, just-in-time configured Genkit instance
-    const localAi = genkit({
-        plugins: [googleAI({apiKey})],
-    });
 
-    // Use the core generate function for more direct control.
-    const { output } = await localAi.generate({
-        model: 'googleai/gemini-1.5-flash',
-        prompt: {
-            text: 'Transcribe the audio from the following video accurately. Provide only the text of the transcription.',
-            media: [{
-                url: input.videoDataUri,
-                contentType: input.contentType,
-            }],
-        },
-        output: {
-            schema: TranscribeVideoOutputSchema
-        },
-    });
-    
-    if (!output?.transcription) {
-        console.error("Transcription failed. AI did not return valid text.");
-        throw new Error("La IA no pudo generar una transcripción.");
+    const [header, base64Data] = input.videoDataUri.split(',');
+    if (!header || !base64Data) {
+      throw new Error('Invalid data URI format.');
     }
+    
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
-    console.log('Transcription completed successfully.');
-    return { transcription: output.transcription };
+    const requestBody = {
+      contents: [
+        {
+          parts: [
+            { text: "Transcribe the audio from the following video accurately. Provide only the text of the transcription." },
+            {
+              inline_data: {
+                mime_type: input.contentType,
+                data: base64Data,
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestBody),
+        });
+
+        if (!response.ok) {
+            const errorBody = await response.text();
+            console.error("Google AI API Error Response:", errorBody);
+            throw new Error(`Google AI API request failed with status ${response.status}: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+
+        if (!data.candidates || !data.candidates[0].content || !data.candidates[0].content.parts[0].text) {
+             console.error("Transcription failed. Invalid response structure from API:", data);
+             throw new Error("La IA no pudo generar una transcripción. Respuesta inesperada.");
+        }
+
+        const transcription = data.candidates[0].content.parts[0].text;
+        
+        console.log('Transcription completed successfully.');
+        return { transcription };
+
+    } catch (error) {
+        console.error("Error during video transcription fetch:", error);
+        throw error;
+    }
 }
