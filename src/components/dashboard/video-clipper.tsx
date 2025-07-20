@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState } from "react";
@@ -12,27 +11,28 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Film, Bot, Loader2, Scissors, WholeWord } from "lucide-react";
-import { transcribeVideo } from "@/ai/flows/transcribe-video";
-import { analyzeVideoContent, type AnalyzedClip } from "@/ai/flows/analyze-video-content";
+import { Film, Bot, Loader2, Scissors, WholeWord, User, Clock } from "lucide-react";
+import { analyzeVideoContent, type AnalyzedClip, type Speaker } from "@/ai/flows/analyze-video-content";
 import { generateUploadUrl } from "@/ai/flows/generate-upload-url";
 import { finalizeUpload } from "@/ai/flows/finalize-upload";
 import { Badge } from "../ui/badge";
-import { Textarea } from "../ui/textarea";
 
 const sanitizeFilename = (filename: string): string => {
-  // Replace spaces and invalid characters with underscores
   return filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+};
+
+const formatTimestamp = (seconds: number) => {
+  const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
+  const secs = Math.floor(seconds % 60).toString().padStart(2, '0');
+  return `${mins}:${secs}`;
 };
 
 
 export default function VideoClipper({ className }: { className?: string }) {
   const [videoFile, setVideoFile] = useState<File | null>(null);
-  const [transcription, setTranscription] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [isTranscribing, setIsTranscribing] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [clips, setClips] = useState<AnalyzedClip[]>([]);
+  const [analysisResult, setAnalysisResult] = useState<{clips: AnalyzedClip[], speakers: Speaker[]} | null>(null);
   const { toast } = useToast();
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -40,8 +40,7 @@ export default function VideoClipper({ className }: { className?: string }) {
     if (file) {
       if (file.type.startsWith("video/")) {
         setVideoFile(file);
-        setClips([]);
-        setTranscription(null);
+        setAnalysisResult(null);
         toast({ title: "Video selected", description: file.name });
       } else {
         toast({
@@ -53,11 +52,10 @@ export default function VideoClipper({ className }: { className?: string }) {
     }
   };
   
-  const handleTranscribe = async () => {
+  const handleAnalyze = async () => {
     if (!videoFile) return;
 
-    setTranscription(null);
-    setClips([]);
+    setAnalysisResult(null);
     setIsUploading(true);
 
     const safeFilename = sanitizeFilename(videoFile.name);
@@ -65,7 +63,7 @@ export default function VideoClipper({ className }: { className?: string }) {
 
     try {
       // 1. Get signed URL
-      toast({ title: "Preparing secure upload..." });
+      toast({ title: "Preparando subida segura..." });
       const { signedUrl, gcsUri, publicUrl: generatedPublicUrl } = await generateUploadUrl({
         filename: safeFilename,
         contentType: videoFile.type,
@@ -73,7 +71,7 @@ export default function VideoClipper({ className }: { className?: string }) {
       publicUrl = generatedPublicUrl;
 
       // 2. Upload file directly to GCS
-      toast({ title: "Uploading video...", description: "Your file is being uploaded directly to secure storage." });
+      toast({ title: "Subiendo video...", description: "Tu archivo se está subiendo directamente al almacenamiento seguro." });
       const uploadResponse = await fetch(signedUrl, {
         method: 'PUT',
         body: videoFile,
@@ -83,10 +81,10 @@ export default function VideoClipper({ className }: { className?: string }) {
       if (!uploadResponse.ok) {
         throw new Error(`Upload failed with status: ${uploadResponse.status}`);
       }
-      toast({ title: "Upload complete!" });
+      toast({ title: "Subida completa!" });
       
       // 3. Finalize upload by making the file public
-      toast({ title: "Finalizing file..." });
+      toast({ title: "Finalizando archivo..." });
       const finalizeResult = await finalizeUpload({ gcsUri });
       if (!finalizeResult.success) {
         throw new Error(finalizeResult.message);
@@ -95,8 +93,8 @@ export default function VideoClipper({ className }: { className?: string }) {
     } catch (error: any) {
       console.error("Error during upload/finalization:", error);
       toast({
-        title: "Upload Error",
-        description: error.message || "Could not complete the video upload process.",
+        title: "Error de Subida",
+        description: error.message || "No se pudo completar el proceso de subida del video.",
         variant: "destructive",
       });
       setIsUploading(false);
@@ -105,65 +103,31 @@ export default function VideoClipper({ className }: { className?: string }) {
       setIsUploading(false);
     }
     
-    // 4. Transcribe from Public URL
-    setIsTranscribing(true);
-    toast({ title: "Starting transcription...", description: "AI is processing the video. This may take a few minutes." });
+    // 4. Analyze video from Public URL
+    setIsAnalyzing(true);
+    toast({ title: "Comenzando análisis...", description: "La IA está procesando el video. Esto puede tomar varios minutos." });
 
     try {
-        const result = await transcribeVideo({ 
+        const result = await analyzeVideoContent({ 
           publicUrl,
           contentType: videoFile.type,
         });
-        setTranscription(result.transcription);
-        toast({ title: "Transcription complete!", description: "You can now analyze the text to find clips."});
+        setAnalysisResult({clips: result.clips, speakers: result.speakers});
+        toast({ title: "Análisis completo!", description: `Se encontraron ${result.clips.length} clips potenciales.`});
     } catch (error: any) {
-        console.error("Error transcribing video:", error);
+        console.error("Error analyzing video:", error);
         toast({
-          title: "Transcription Error",
-          description: error.message || "Could not transcribe the video.",
+          title: "Error de Análisis",
+          description: error.message || "No se pudo analizar el video.",
           variant: "destructive",
         });
     } finally {
-        setIsTranscribing(false);
+        setIsAnalyzing(false);
     }
   }
-
-  const handleAnalyze = async () => {
-    if (!transcription) {
-      toast({
-        title: "No transcription available",
-        description: "Please transcribe the video first.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsAnalyzing(true);
-    setClips([]);
-
-    try {
-      const result = await analyzeVideoContent({ transcription });
-      
-      setClips(result.clips);
-      toast({
-        title: "Analysis complete",
-        description: `Identified ${result.clips.length} potential clips.`,
-      });
-
-    } catch (error: any) {
-      console.error("Error analyzing video:", error);
-      toast({
-        title: "Analysis Error",
-        description: error.message || "Could not generate clips.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
   
-  const isLoading = isUploading || isTranscribing || isAnalyzing;
-  const loadingStep = isUploading ? "Uploading..." : isTranscribing ? "Transcribing..." : "Analyzing...";
+  const isLoading = isUploading || isAnalyzing;
+  const loadingStep = isUploading ? "Subiendo..." : "Analizando...";
 
   return (
     <Card className={`${className} flex flex-col`}>
@@ -173,22 +137,16 @@ export default function VideoClipper({ className }: { className?: string }) {
           Video Clipper
         </CardTitle>
         <CardDescription>
-          Upload a video, the AI will transcribe it and find key moments to create clips.
+          Sube un video, la IA lo analizará para crear clips verticales inteligentes.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex-grow space-y-4">
         <div className="space-y-2">
           <Input type="file" accept="video/*" onChange={handleFileChange} disabled={isLoading} />
-          <div className="grid grid-cols-2 gap-2">
-            <Button onClick={handleTranscribe} className="w-full" disabled={!videoFile || isLoading}>
-                {isUploading || isTranscribing ? <Loader2 className="animate-spin mr-2" /> : <WholeWord className="mr-2" />}
-                {isUploading ? "Uploading..." : isTranscribing ? "Transcribing..." : "1. Process Video"}
-            </Button>
-            <Button onClick={handleAnalyze} className="w-full" disabled={!transcription || isLoading}>
-                {isAnalyzing ? <Loader2 className="animate-spin mr-2" /> : <Bot className="mr-2" />}
-                {isAnalyzing ? "Analyzing..." : "2. Find Clips"}
-            </Button>
-          </div>
+          <Button onClick={handleAnalyze} className="w-full" disabled={!videoFile || isLoading}>
+              {isLoading ? <Loader2 className="animate-spin mr-2" /> : <Bot className="mr-2" />}
+              {isLoading ? loadingStep : "Analizar Video y Buscar Clips"}
+          </Button>
         </div>
         
         <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
@@ -198,48 +156,48 @@ export default function VideoClipper({ className }: { className?: string }) {
                 <p>
                     {loadingStep}
                 </p>
-                <p className="text-sm">This may take a few minutes for large videos.</p>
+                <p className="text-sm">Esto puede tardar varios minutos para videos largos.</p>
               </div>
           )}
 
-          {transcription && !isTranscribing && (
-            <div>
-              <h3 className="font-semibold mb-2">Video Transcription:</h3>
-              <Textarea 
-                readOnly 
-                value={transcription} 
-                className="h-32 bg-muted/50"
-                placeholder="The transcription will appear here..."
-              />
-            </div>
-          )}
-
-          {clips.length > 0 ? (
-            clips.map((clip) => (
-              <Card key={clip.id} className="bg-card/50">
-                <CardContent className="p-4 space-y-2">
-                    <div className="flex justify-between items-start">
-                        <p className="text-sm font-semibold text-card-foreground break-words w-full">
-                            {clip.title}
-                        </p>
-                         <Badge variant="secondary">{clip.timestamp}</Badge>
+          {analysisResult && analysisResult.clips.length > 0 ? (
+            analysisResult.clips.map((clip) => {
+              const speaker = analysisResult.speakers.find(s => s.id === clip.mainSpeakerId);
+              return (
+                <Card key={clip.id} className="bg-card/50">
+                  <CardContent className="p-4 space-y-3">
+                      <div className="flex justify-between items-start gap-2">
+                          <p className="font-semibold text-card-foreground break-words w-full">
+                              {clip.title}
+                          </p>
+                           <Badge variant="secondary" className="flex-shrink-0">
+                             <Clock className="h-3 w-3 mr-1" />
+                             {formatTimestamp(clip.startTime)} - {formatTimestamp(clip.endTime)}
+                           </Badge>
+                      </div>
+                    <p className="text-sm text-muted-foreground break-words w-full">
+                      {clip.summary}
+                    </p>
+                    {speaker && (
+                      <Badge variant="outline">
+                        <User className="h-3 w-3 mr-1.5" />
+                        Enfocar en: {speaker.description}
+                      </Badge>
+                    )}
+                    <div className="flex gap-2 pt-2">
+                        <Button size="sm" variant="outline" className="w-full" disabled>
+                          <Scissors className="mr-2 h-4 w-4"/>
+                          Crear Clip con FFMPEG (Próximamente)
+                        </Button>
                     </div>
-                  <p className="text-sm text-muted-foreground break-words w-full">
-                    {clip.summary}
-                  </p>
-                  <div className="flex gap-2 pt-2">
-                      <Button size="sm" variant="outline" className="w-full" disabled>
-                        <Scissors className="mr-2 h-4 w-4"/>
-                        Create Clip (Coming Soon)
-                      </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
+                  </CardContent>
+                </Card>
+              )
+            })
           ) : (
-            !isLoading && !transcription && (
+            !isLoading && (
                 <div className="text-center text-muted-foreground py-12">
-                    <p>Upload a video to get started.</p>
+                    <p>Sube un video para comenzar.</p>
                 </div>
             )
           )}
