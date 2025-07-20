@@ -64,9 +64,9 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
 
     // 2. Define ffmpeg crop parameters based on speaker position
     const duration = endTime - startTime;
-    // For a 1920x1080 (16:9) video, we create a 9:16 vertical video.
-    // The crop area width will be the original height times 9/16.
-    // The crop area height will be the original height.
+    // For a 1920x1080 (16:9) video, we create a 1080x1920 (9:16) vertical video.
+    // The crop area width will be the original height times 9/16. (1080 * 9/16 = 607.5)
+    // The crop area height will be the original height. (1080)
     // crop filter format is: crop=w:h:x:y
     let cropFilter: string;
     const cropWidth = "ih*9/16"; // output_width = input_height * (9/16)
@@ -74,22 +74,22 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
 
     switch (speaker.position) {
       case 'izquierda':
-        // x=0 to align to the left edge
+        // Crop the left part of the video. 'x' is 0.
         cropFilter = `crop=${cropWidth}:${cropHeight}:0:0`;
         break;
       case 'derecha':
-        // x = iw - ow (input_width - output_width) to align to the right edge
+        // Crop the right part. 'x' is input_width - output_width.
         cropFilter = `crop=${cropWidth}:${cropHeight}:iw-${cropWidth}:0`;
         break;
       case 'centro':
       default:
-        // x = (iw - ow) / 2 to center the crop
+        // Crop the center. 'x' is (input_width - output_width) / 2.
         cropFilter = `crop=${cropWidth}:${cropHeight}:(iw-${cropWidth})/2:0`;
         break;
     }
 
-    // 3. Construct the ffmpeg command. It now includes audio.
-    const ffmpegCommand = `ffmpeg -y -ss ${startTime} -i "${originalVideoPath}" -t ${duration} -vf "${cropFilter}" -c:a copy "${outputClipPath}"`;
+    // 3. Construct the ffmpeg command.
+    const ffmpegCommand = `ffmpeg -y -ss ${startTime} -i "${originalVideoPath}" -t ${duration} -vf "${cropFilter},scale=1080:1920" -c:a copy -preset ultrafast "${outputClipPath}"`;
     console.log(`Generated ffmpeg command: ${ffmpegCommand}`);
 
     // 4. Execute the ffmpeg command
@@ -99,15 +99,6 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
     
     execSync(ffmpegCommand);
     
-    // --- MOCK RESPONSE (if execSync is commented out) ---
-    // To allow the UI to be tested without ffmpeg, we'll simulate a successful response.
-    // When you uncomment execSync, you should comment out or remove this block.
-    // await new Promise(resolve => setTimeout(resolve, 3000)); // Simulate processing time
-    // if (!fs.existsSync(outputClipPath)) {
-    //     // Create a placeholder file for demonstration if it doesn't exist
-    //     fs.writeFileSync(outputClipPath, "mock video content"); 
-    // }
-    // --- END MOCK RESPONSE ---
 
     if (!fs.existsSync(outputClipPath)) {
         throw new Error("ffmpeg command did not produce an output file.");
