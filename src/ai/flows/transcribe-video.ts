@@ -27,21 +27,6 @@ export type TranscribeVideoOutput = z.infer<
   typeof TranscribeVideoOutputSchema
 >;
 
-// Define the prompt that instructs the AI to transcribe the video.
-// The key is to pass both url and contentType to the media helper.
-const transcriptionPrompt = ai.definePrompt({
-  name: 'transcriptionPrompt',
-  input: { schema: TranscribeVideoInputSchema },
-  output: { schema: TranscribeVideoOutputSchema },
-  prompt: `Transcribe the audio from the following video accurately. Provide only the text of the transcription.
-  
-  Video: {{media url=videoDataUri contentType=contentType}}`,
-  
-  // Use a more robust model that supports video input like Gemini 1.5 Pro.
-  // We reference the model directly from the plugin to ensure it's resolved correctly.
-  model: googleAI.model('gemini-1.5-pro-preview-0514'), 
-});
-
 // Define the flow that will be called from the frontend
 export const transcribeVideo = ai.defineFlow(
   {
@@ -50,11 +35,23 @@ export const transcribeVideo = ai.defineFlow(
     outputSchema: TranscribeVideoOutputSchema,
   },
   async (input) => {
-    console.log('Starting video transcription with Gemini 1.5 Pro...');
+    console.log('Starting video transcription with Gemini 1.5 Flash...');
     
-    // Pass the input directly to the prompt.
-    // Genkit's prompt templating will handle the media object creation.
-    const { output } = await transcriptionPrompt(input);
+    // Use the core generate function for more direct control.
+    // This avoids issues with prompt templating for complex media types.
+    const { output } = await ai.generate({
+        model: googleAI.model('gemini-1.5-flash'),
+        prompt: {
+            text: 'Transcribe the audio from the following video accurately. Provide only the text of the transcription.',
+            media: [{
+                url: input.videoDataUri,
+                contentType: input.contentType,
+            }],
+        },
+        output: {
+            schema: TranscribeVideoOutputSchema
+        }
+    });
     
     if (!output?.transcription) {
         console.error("Transcription failed. AI did not return valid text.");
