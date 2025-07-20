@@ -1,32 +1,32 @@
 'use server';
 
 /**
- * @fileOverview Un flujo de IA para analizar el contenido de un video y extraer clips virales.
+ * @fileOverview An AI flow to analyze video content and extract viral clips.
  */
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 
 
-// Define el esquema para la entrada del flujo
+// Define the schema for the input of the flow
 const AnalyzeVideoInputSchema = z.object({
-  transcription: z.string().describe('La transcripción completa del video.'),
+  transcription: z.string().describe('The full transcription of the video.'),
 });
 export type AnalyzeVideoInput = z.infer<typeof AnalyzeVideoInputSchema>;
 
-// Define el esquema para un único clip analizado
+// Define the schema for a single analyzed clip
 const AnalyzedClipSchema = z.object({
-  id: z.string().describe('Un identificador único para el clip.'),
-  title: z.string().describe('Un título corto y atractivo para el clip.'),
-  summary: z.string().describe('Un resumen del contenido del clip.'),
-  timestamp: z.string().describe('El rango de tiempo del clip en formato "MM:SS - MM:SS".'),
-  viralityScore: z.number().min(1).max(10).describe('Una puntuación del 1 al 10 sobre el potencial viral del clip.'),
+  id: z.string().describe('A unique identifier for the clip.'),
+  title: z.string().describe('A short, catchy title for the clip.'),
+  summary: z.string().describe('A summary of the clip content.'),
+  timestamp: z.string().describe('The time range of the clip in "MM:SS - MM:SS" format.'),
+  viralityScore: z.number().min(1).max(10).describe('A score from 1-10 on the clip\'s viral potential.'),
 });
 export type AnalyzedClip = z.infer<typeof AnalyzedClipSchema>;
 
 
-// Define el esquema para la salida del flujo
+// Define the schema for the output of the flow
 const AnalyzeVideoOutputSchema = z.object({
-  clips: z.array(AnalyzedClipSchema).describe('Una lista de los clips más interesantes encontrados en el video.'),
+  clips: z.array(AnalyzedClipSchema).describe('A list of the most interesting clips found in the video.'),
 });
 export type AnalyzeVideoOutput = z.infer<typeof AnalyzeVideoOutputSchema>;
 
@@ -77,7 +77,7 @@ const analyzeVideoContentFlow = ai.defineFlow(
         throw new Error("La IA no pudo generar ningún clip con el formato esperado.");
     }
     
-    // Ordenar los clips por puntuación de viralidad descendente
+    // Sort clips by virality score descending
     output.clips.sort((a: AnalyzedClip, b: AnalyzedClip) => b.viralityScore - a.viralityScore);
 
     console.log(`Análisis completo. Se encontraron ${output.clips.length} clips.`);
