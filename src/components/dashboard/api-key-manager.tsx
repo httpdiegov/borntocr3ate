@@ -27,7 +27,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { KeyRound, Save, Loader2, Plus, Eye, EyeOff, ChevronDown, Filter } from "lucide-react";
+import { KeyRound, Save, Loader2, Plus, Eye, EyeOff, ChevronDown, Copy, Check } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { updateApiKey } from "@/ai/flows/update-api-key";
 import { getApiKeys } from "@/ai/flows/get-api-keys";
@@ -59,6 +59,7 @@ export default function ApiKeyManager({ className }: { className?: string }) {
   const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({});
   const [checkingKeys, setCheckingKeys] = useState(true);
   const [filterTag, setFilterTag] = useState("");
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -180,12 +181,30 @@ export default function ApiKeyManager({ className }: { className?: string }) {
       prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
     );
   };
+  
+  const handleCopyKey = (key: string) => {
+    const valueToCopy = keyValues[key];
+    if (navigator.clipboard && valueToCopy) {
+      navigator.clipboard.writeText(valueToCopy).then(() => {
+        setCopiedKey(key);
+        toast({ title: "¡Copiado!", description: "La clave ha sido copiada al portapapeles." });
+        setTimeout(() => setCopiedKey(null), 2000);
+      }).catch(err => {
+        console.error("Could not copy text: ", err);
+        toast({ title: "Error", description: "No se pudo copiar la clave.", variant: "destructive" });
+      });
+    }
+  };
+
 
   const isLoadingNew = loadingKey === 'new_key';
 
   const filteredKeys = predefinedApiKeys.filter(key => {
     if (filterTag === "") return true;
-    return key.tags.includes(filterTag);
+    const keyInfoTags = keyInfo[key.key]?.tags || [];
+    // Fallback to predefined tags if keyInfo tags are not available (e.g., before first save)
+    const effectiveTags = keyInfoTags.length > 0 ? keyInfoTags : key.tags;
+    return effectiveTags.includes(filterTag);
   });
 
   return (
@@ -226,12 +245,16 @@ export default function ApiKeyManager({ className }: { className?: string }) {
               const info = keyInfo[key];
               const hasValue = !!info?.value;
               const displayValue = keyValues[key] || "";
+              const isCopied = copiedKey === key;
+              
+              // Use tags from fetched key info if available, otherwise use predefined tags
+              const effectiveTags = info?.tags && info.tags.length > 0 ? info.tags : tags;
 
               return (
                 <div key={key} className="space-y-2">
                   <div className="flex items-center gap-2 flex-wrap">
                     <Label htmlFor={key} className="flex-1 font-semibold">{name}</Label>
-                    {info?.tags?.map(tag => (
+                    {effectiveTags.map(tag => (
                       <Badge key={tag} variant="secondary">{tag}</Badge>
                     ))}
                   </div>
@@ -249,6 +272,13 @@ export default function ApiKeyManager({ className }: { className?: string }) {
                       {isVisible ? <EyeOff /> : <Eye />}
                       <span className="sr-only">
                         {isVisible ? 'Hide' : 'Show'} key
+                      </span>
+                    </Button>
+
+                     <Button variant="ghost" size="icon" onClick={() => handleCopyKey(key)} disabled={isLoading || !hasValue}>
+                       {isCopied ? <Check className="text-green-500"/> : <Copy />}
+                      <span className="sr-only">
+                        Copy key
                       </span>
                     </Button>
                     
