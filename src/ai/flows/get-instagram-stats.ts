@@ -18,16 +18,15 @@ export type GetInstagramStatsInput = z.infer<typeof GetInstagramStatsInputSchema
 
 const GetInstagramStatsOutputSchema = z.object({
     username: z.string().describe('The username of the account.'),
-    mediaCount: z.number().describe('The number of media objects on the account.'),
-    // Note: Followers count is not available through the Basic Display API without advanced permissions.
-    // We will return a placeholder value.
+    mediaCount: z.number().describe('The number of media objects on the account (placeholder).'),
     followersCount: z.string().describe('The number of followers (placeholder).'), 
     profilePicUrl: z.string().describe('The URL of the profile picture (placeholder).'),
 });
 export type GetInstagramStatsOutput = z.infer<typeof GetInstagramStatsOutputSchema>;
 
 async function fetchInstagramData(input: GetInstagramStatsInput): Promise<GetInstagramStatsOutput> {
-  const url = `https://graph.instagram.com/me?fields=username,media_count&access_token=${input.accessToken}`;
+  // The Basic Display API only provides 'id' and 'username'. 'media_count' is not available.
+  const url = `https://graph.instagram.com/me?fields=username&access_token=${input.accessToken}`;
 
   try {
     const response = await fetch(url);
@@ -40,8 +39,8 @@ async function fetchInstagramData(input: GetInstagramStatsInput): Promise<GetIns
 
     return {
       username: data.username,
-      mediaCount: data.media_count,
-      // Placeholder data as follower count is not available in the Basic Display API
+      // Placeholder data as media_count and followers_count are not available in the Basic Display API
+      mediaCount: 1337, 
       followersCount: '1.2M', 
       profilePicUrl: 'https://placehold.co/80x80.png',
     };
