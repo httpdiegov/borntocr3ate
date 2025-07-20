@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { KeyRound, Save, Loader2, Plus, Eye, EyeOff, Edit, X } from "lucide-react";
+import { KeyRound, Save, Loader2, Plus, Eye, EyeOff } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { updateApiKey } from "@/ai/flows/update-api-key";
 import { getApiKeys } from "@/ai/flows/get-api-keys";
@@ -42,6 +42,7 @@ export default function ApiKeyManager({ className }: { className?: string }) {
         const keyNames = predefinedApiKeys.map(k => k.key);
         const result = await getApiKeys({ services: keyNames });
         setSavedKeys(result.keys);
+        setKeyValues(result.keys); // Initialize input values with fetched keys
       } catch (error) {
         console.error("Failed to fetch API key values:", error);
         toast({
@@ -84,7 +85,6 @@ export default function ApiKeyManager({ className }: { className?: string }) {
           title: "Success",
           description: result.message || `${name} has been updated.`,
         });
-        setKeyValues((prev) => ({...prev, [key]: ''})); 
         setSavedKeys((prev) => ({ ...prev, [key]: value }));
       } else {
          throw new Error(result.message || 'An unknown error occurred.');
@@ -170,8 +170,8 @@ export default function ApiKeyManager({ className }: { className?: string }) {
                     <Input
                       id={key}
                       type={isVisible ? "text" : "password"}
-                      placeholder={isSet ? "" : "Key not set..."}
-                      value={isVisible ? (keyValues[key] || savedKeys[key]) : "••••••••••••••••"}
+                      placeholder={"Key not set..."}
+                      value={keyValues[key] || ""}
                       onChange={(e) => handleInputChange(key, e.target.value)}
                       disabled={isLoading}
                     />
