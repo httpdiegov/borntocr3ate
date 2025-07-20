@@ -11,13 +11,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Film, Bot, Loader2, Scissors, WholeWord, User, Clock } from "lucide-react";
+import { Film, Bot, Loader2, Scissors, User, Clock } from "lucide-react";
 import { analyzeVideoContent, type AnalyzedClip, type Speaker } from "@/ai/flows/analyze-video-content";
 import { generateUploadUrl } from "@/ai/flows/generate-upload-url";
 import { finalizeUpload } from "@/ai/flows/finalize-upload";
 import { Badge } from "../ui/badge";
 
 const sanitizeFilename = (filename: string): string => {
+  // Allow letters, numbers, underscore, hyphen, and period. Replace others with underscore.
   return filename.replace(/[^a-zA-Z0-9._-]/g, '_');
 };
 
@@ -57,9 +58,8 @@ export default function VideoClipper({ className }: { className?: string }) {
 
     setAnalysisResult(null);
     setIsUploading(true);
-
-    const safeFilename = sanitizeFilename(videoFile.name);
     let publicUrl: string;
+    const safeFilename = sanitizeFilename(videoFile.name);
 
     try {
       // 1. Get signed URL
@@ -89,38 +89,31 @@ export default function VideoClipper({ className }: { className?: string }) {
       if (!finalizeResult.success) {
         throw new Error(finalizeResult.message);
       }
+      
+      setIsUploading(false);
+
+      // 4. Analyze video from Public URL
+      setIsAnalyzing(true);
+      toast({ title: "Comenzando análisis...", description: "La IA está procesando el video. Esto puede tomar varios minutos." });
+
+      const result = await analyzeVideoContent({ 
+        publicUrl,
+        contentType: videoFile.type,
+      });
+
+      setAnalysisResult({clips: result.clips, speakers: result.speakers});
+      toast({ title: "Análisis completo!", description: `Se encontraron ${result.clips.length} clips potenciales.`});
 
     } catch (error: any) {
-      console.error("Error during upload/finalization:", error);
+      console.error("Error during video processing:", error);
       toast({
-        title: "Error de Subida",
-        description: error.message || "No se pudo completar el proceso de subida del video.",
+        title: "Error en el Proceso",
+        description: error.message || "No se pudo completar el proceso del video.",
         variant: "destructive",
       });
-      setIsUploading(false);
+      setIsUploading(false); // Ensure loading state is reset on error
+      setIsAnalyzing(false);
       return;
-    } finally {
-      setIsUploading(false);
-    }
-    
-    // 4. Analyze video from Public URL
-    setIsAnalyzing(true);
-    toast({ title: "Comenzando análisis...", description: "La IA está procesando el video. Esto puede tomar varios minutos." });
-
-    try {
-        const result = await analyzeVideoContent({ 
-          publicUrl,
-          contentType: videoFile.type,
-        });
-        setAnalysisResult({clips: result.clips, speakers: result.speakers});
-        toast({ title: "Análisis completo!", description: `Se encontraron ${result.clips.length} clips potenciales.`});
-    } catch (error: any) {
-        console.error("Error analyzing video:", error);
-        toast({
-          title: "Error de Análisis",
-          description: error.message || "No se pudo analizar el video.",
-          variant: "destructive",
-        });
     } finally {
         setIsAnalyzing(false);
     }
