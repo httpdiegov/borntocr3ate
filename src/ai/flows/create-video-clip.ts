@@ -1,0 +1,135 @@
+'use server';
+
+/**
+ * @fileOverview A flow for creating a vertical video clip from a larger video using ffmpeg.
+ */
+
+import { z } from 'zod';
+import { ai } from '@/ai/genkit';
+import { execSync } from 'child_process';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+
+// Define the schema for a speaker identified in the video
+const SpeakerSchema = z.object({
+  id: z.string().describe('A unique identifier for the speaker (e.g., "orador_1").'),
+  description: z.string().describe('A brief description of the speaker (e.g., "man with glasses on the left").'),
+  position: z.enum(['izquierda', 'derecha', 'centro', 'desconocido']).describe('The speaker\'s general position in the frame.'),
+});
+
+const CreateVideoClipInputSchema = z.object({
+  videoUrl: z.string().url().describe('The public URL of the original horizontal video.'),
+  startTime: z.number().describe('Start time of the clip in seconds.'),
+  endTime: z.number().describe('End time of the clip in seconds.'),
+  speaker: SpeakerSchema.describe('The speaker to focus on for the clip.'),
+  clipTitle: z.string().describe('The title of the clip, used for the output filename.')
+});
+export type CreateVideoClipInput = z.infer<typeof CreateVideoClipInputSchema>;
+
+const CreateVideoClipOutputSchema = z.object({
+    success: z.boolean(),
+    message: z.string(),
+    videoDataUri: z.string().optional().describe("The generated video clip as a data URI (data:video/mp4;base64,...)."),
+    ffmpegCommand: z.string().describe("The ffmpeg command that was generated.")
+});
+export type CreateVideoClipOutput = z.infer<typeof CreateVideoClipOutputSchema>;
+
+// This function defines the logic for creating a video clip.
+// NOTE: This flow requires `ffmpeg` to be installed on the system where it's executed.
+// It will not work in a standard sandboxed cloud environment unless ffmpeg is included in the container.
+async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipOutput> {
+  const { videoUrl, startTime, endTime, speaker, clipTitle } = input;
+  
+  // Create temporary file paths
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'clip-'));
+  const originalVideoPath = path.join(tempDir, 'original.mp4');
+  const safeClipTitle = clipTitle.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const outputClipPath = path.join(tempDir, `${safeClipTitle}.mp4`);
+  
+  try {
+    // 1. Download the original video file
+    console.log(`Downloading video from ${videoUrl}`);
+    const response = await fetch(videoUrl);
+    if (!response.ok) throw new Error(`Failed to download video: ${response.statusText}`);
+    const videoBuffer = await response.arrayBuffer();
+    fs.writeFileSync(originalVideoPath, Buffer.from(videoBuffer));
+    console.log(`Video downloaded to ${originalVideoPath}`);
+
+    // 2. Define ffmpeg crop parameters based on speaker position
+    const duration = endTime - startTime;
+    // For a 1920x1080 video, we create a 1080x1920 crop.
+    // The crop area will be 1/3 of the width of the original video.
+    // We assume the original video is 1920px wide for this logic.
+    // Crop arguments for ffmpeg are: crop=width:height:x:y
+    let cropFilter: string;
+    switch (speaker.position) {
+      case 'izquierda':
+        // Crop the left third of the video
+        cropFilter = 'crop=ih*9/16:ih:0:0'; 
+        break;
+      case 'derecha':
+        // Crop the right third of the video. x = 1920 - (width of crop)
+        cropFilter = 'crop=ih*9/16:ih:iw-ih*9/16:0';
+        break;
+      case 'centro':
+      default:
+        // Crop the center third of the video
+        cropFilter = 'crop=ih*9/16:ih:(iw-ih*9/16)/2:0';
+        break;
+    }
+
+    // 3. Construct the ffmpeg command
+    const ffmpegCommand = `ffmpeg -i "${originalVideoPath}" -ss ${startTime} -t ${duration} -vf "${cropFilter}" -an "${outputClipPath}"`;
+    console.log(`Generated ffmpeg command: ${ffmpegCommand}`);
+
+    // 4. Execute the ffmpeg command
+    // THIS IS THE LINE THAT REQUIRES FFMPEG TO BE INSTALLED LOCALLY.
+    // It is commented out by default to prevent errors in environments without ffmpeg.
+    // To run locally: 1) Install ffmpeg on your system. 2) Uncomment the line below.
+    
+    // execSync(ffmpegCommand);
+    
+    // --- MOCK RESPONSE (if execSync is commented out) ---
+    // To allow the UI to be tested without ffmpeg, we'll simulate a successful response.
+    // When you uncomment execSync, you should comment out or remove this block.
+    await new Promise(resolve => setTimeout(resolve, 3000)); // Simulate processing time
+    if (!fs.existsSync(outputClipPath)) {
+        // Create a placeholder file for demonstration if it doesn't exist
+        fs.writeFileSync(outputClipPath, "mock video content"); 
+    }
+    // --- END MOCK RESPONSE ---
+
+    if (!fs.existsSync(outputClipPath)) {
+        throw new Error("ffmpeg command did not produce an output file.");
+    }
+    
+    // 5. Read the output file and convert to a data URI
+    const videoResultBuffer = fs.readFileSync(outputClipPath);
+    const videoDataUri = `data:video/mp4;base64,${videoResultBuffer.toString('base64')}`;
+
+    console.log(`Successfully created clip: ${outputClipPath}`);
+    return { 
+        success: true, 
+        message: 'Clip created successfully!',
+        videoDataUri,
+        ffmpegCommand
+    };
+
+  } catch (error: any) {
+    console.error('Failed to create video clip:', error);
+    return { success: false, message: `Failed to create clip: ${error.message}`, ffmpegCommand: 'Error generating command.' };
+  } finally {
+    // Clean up temporary files
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
+export const createVideoClip = ai.defineFlow(
+    {
+        name: 'createVideoClipFlow',
+        inputSchema: CreateVideoClipInputSchema,
+        outputSchema: CreateVideoClipOutputSchema,
+    },
+    createClip
+);
