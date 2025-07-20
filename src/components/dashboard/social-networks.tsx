@@ -13,13 +13,15 @@ import { ChevronLeft, ChevronRight, Globe, AlertTriangle, Loader } from "lucide-
 import Link from "next/link";
 import Image from "next/image";
 import { YoutubeIcon } from "../icons/youtube-icon";
+import { InstagramIcon } from "../icons/instagram-icon";
 import { getYoutubeStats, type GetYoutubeStatsOutput } from "@/ai/flows/get-youtube-stats";
 
 type SocialAccount = {
-  platform: "YouTube";
+  platform: "YouTube" | "Instagram";
   handle: string;
   href: string;
   icon: JSX.Element;
+  statsComponent: React.FC<{ handle: string }>;
 };
 
 type ApiKey = {
@@ -28,18 +30,7 @@ type ApiKey = {
   key: string;
 };
 
-const socialAccounts: SocialAccount[] = [
-  {
-    platform: "YouTube",
-    handle: "@transdavismo",
-    href: "https://www.youtube.com/@transdavismo",
-    icon: <YoutubeIcon className="h-6 w-6" />,
-  },
-  // Add more accounts here in the future
-];
-
-export default function SocialNetworks({ className }: { className?: string }) {
-  const [currentIndex, setCurrentIndex] = useState(0);
+const YouTubeStats: React.FC<{ handle: string }> = ({ handle }) => {
   const [stats, setStats] = useState<GetYoutubeStatsOutput | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -68,9 +59,9 @@ export default function SocialNetworks({ className }: { className?: string }) {
         if (!apiKey) {
           throw new Error("YouTube API key not found. Please add it in the API Key Manager with the service name 'youtube_api_key'.");
         }
-        const account = socialAccounts[currentIndex];
+        
         const result = await getYoutubeStats({
-          channelHandle: account.handle,
+          channelHandle: handle,
           apiKey: apiKey,
         });
         setStats(result);
@@ -82,87 +73,43 @@ export default function SocialNetworks({ className }: { className?: string }) {
     };
 
     fetchStats();
-  }, [currentIndex, isMounted]);
+  }, [handle, isMounted]);
 
-  const handleNext = () => {
-    setCurrentIndex((prev) => (prev + 1) % socialAccounts.length);
-  };
-
-  const handlePrev = () => {
-    setCurrentIndex(
-      (prev) => (prev - 1 + socialAccounts.length) % socialAccounts.length
+  if (!isMounted || loading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+        <Loader className="h-8 w-8 animate-spin" />
+        <p className="mt-2">Loading channel data...</p>
+      </div>
     );
-  };
+  }
 
-  const account = socialAccounts[currentIndex];
-
-  const renderContent = () => {
-    if (!isMounted) {
-       return (
-        <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-          <Loader className="h-8 w-8 animate-spin" />
-          <p className="mt-2">Loading...</p>
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-destructive text-center">
+        <AlertTriangle className="h-8 w-8" />
+        <p className="mt-2 font-semibold">Error</p>
+        <p className="text-sm">{error}</p>
+      </div>
+    );
+  }
+  
+  if (stats) {
+    return (
+      <div className="flex flex-col items-center w-full">
+        <Image
+          src={stats.profilePicUrl}
+          alt={`${stats.name} profile picture`}
+          width={80}
+          height={80}
+          className="rounded-full border-2 border-primary"
+        />
+        <div className="flex items-center gap-2 mt-2">
+          <YoutubeIcon className="h-6 w-6" />
+          <h3 className="text-xl font-bold">{stats.name}</h3>
         </div>
-      );
-    }
-    
-    if (loading) {
-      return (
-        <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-          <Loader className="h-8 w-8 animate-spin" />
-          <p className="mt-2">Loading channel data...</p>
-        </div>
-      );
-    }
-
-    if (error) {
-      return (
-        <div className="flex flex-col items-center justify-center h-full text-destructive text-center">
-          <AlertTriangle className="h-8 w-8" />
-          <p className="mt-2 font-semibold">Error</p>
-          <p className="text-sm">{error}</p>
-        </div>
-      );
-    }
-
-    if (stats) {
-      return (
-        <>
-          <div className="flex items-center justify-between w-full mb-4">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handlePrev}
-              disabled={socialAccounts.length <= 1}
-              aria-label="Previous Account"
-            >
-              <ChevronLeft className="h-6 w-6" />
-            </Button>
-            <div className="flex flex-col items-center gap-2">
-              <Image
-                src={stats.profilePicUrl}
-                alt={`${stats.name} profile picture`}
-                width={80}
-                height={80}
-                className="rounded-full border-2 border-primary"
-              />
-              <div className="flex items-center gap-2">
-                {account.icon}
-                <h3 className="text-xl font-bold">{stats.name}</h3>
-              </div>
-              <p className="text-muted-foreground">{account.handle}</p>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleNext}
-              disabled={socialAccounts.length <= 1}
-              aria-label="Next Account"
-            >
-              <ChevronRight className="h-6 w-6" />
-            </Button>
-          </div>
-          <div className="grid grid-cols-3 justify-around w-full my-4 text-center">
+        <p className="text-muted-foreground">{handle}</p>
+        <div className="grid grid-cols-3 justify-around w-full my-4 text-center">
             <div key="Subscribers">
               <p className="text-2xl font-bold">{stats.subscriberCount}</p>
               <p className="text-sm text-muted-foreground">Subscribers</p>
@@ -175,17 +122,80 @@ export default function SocialNetworks({ className }: { className?: string }) {
               <p className="text-2xl font-bold">{stats.viewCount}</p>
               <p className="text-sm text-muted-foreground">Views</p>
             </div>
-          </div>
-          <Button asChild className="w-full mt-auto">
-            <Link href={account.href} target="_blank" rel="noopener noreferrer">
-              Visit Channel
-            </Link>
-          </Button>
-        </>
-      );
-    }
-    return null;
+        </div>
+      </div>
+    )
+  }
+
+  return null;
+}
+
+const InstagramStats: React.FC<{ handle: string }> = ({ handle }) => {
+    return (
+      <div className="flex flex-col items-center w-full">
+        <Image
+          src="https://placehold.co/80x80.png"
+          data-ai-hint="logo"
+          alt={`Instagram profile picture`}
+          width={80}
+          height={80}
+          className="rounded-full border-2 border-primary"
+        />
+        <div className="flex items-center gap-2 mt-2">
+          <InstagramIcon className="h-6 w-6" />
+          <h3 className="text-xl font-bold">Your Account</h3>
+        </div>
+        <p className="text-muted-foreground">{handle}</p>
+        <div className="grid grid-cols-3 justify-around w-full my-4 text-center">
+            <div key="Followers">
+              <p className="text-2xl font-bold">1.2M</p>
+              <p className="text-sm text-muted-foreground">Followers</p>
+            </div>
+             <div key="Following">
+              <p className="text-2xl font-bold">345</p>
+              <p className="text-sm text-muted-foreground">Following</p>
+            </div>
+             <div key="Posts">
+              <p className="text-2xl font-bold">587</p>
+              <p className="text-sm text-muted-foreground">Posts</p>
+            </div>
+        </div>
+      </div>
+    )
+}
+
+const socialAccounts: SocialAccount[] = [
+  {
+    platform: "YouTube",
+    handle: "@transdavismo",
+    href: "https://www.youtube.com/@transdavismo",
+    icon: <YoutubeIcon className="h-6 w-6" />,
+    statsComponent: YouTubeStats,
+  },
+  {
+    platform: "Instagram",
+    handle: "@your_instagram",
+    href: "https://www.instagram.com/your_instagram",
+    icon: <InstagramIcon className="h-6 w-6" />,
+    statsComponent: InstagramStats,
+  },
+];
+
+export default function SocialNetworks({ className }: { className?: string }) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  const handleNext = () => {
+    setCurrentIndex((prev) => (prev + 1) % socialAccounts.length);
   };
+
+  const handlePrev = () => {
+    setCurrentIndex(
+      (prev) => (prev - 1 + socialAccounts.length) % socialAccounts.length
+    );
+  };
+
+  const account = socialAccounts[currentIndex];
+  const StatsComponent = account.statsComponent;
 
   return (
     <Card className={`${className} flex flex-col`}>
@@ -199,7 +209,36 @@ export default function SocialNetworks({ className }: { className?: string }) {
         </CardDescription>
       </CardHeader>
       <CardContent className="flex-grow flex flex-col justify-center items-center text-center">
-        {renderContent()}
+         <div className="flex items-center justify-between w-full mb-4">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handlePrev}
+              disabled={socialAccounts.length <= 1}
+              aria-label="Previous Account"
+            >
+              <ChevronLeft className="h-6 w-6" />
+            </Button>
+            
+            <div className="flex-grow flex flex-col items-center">
+                <StatsComponent handle={account.handle} />
+            </div>
+
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleNext}
+              disabled={socialAccounts.length <= 1}
+              aria-label="Next Account"
+            >
+              <ChevronRight className="h-6 w-6" />
+            </Button>
+          </div>
+          <Button asChild className="w-full mt-auto">
+            <Link href={account.href} target="_blank" rel="noopener noreferrer">
+              Visit {account.platform}
+            </Link>
+          </Button>
       </CardContent>
     </Card>
   );
