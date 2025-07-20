@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -16,7 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { KeyRound, Save, Loader2, Plus, Eye, EyeOff, Edit, X } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { updateApiKey } from "@/ai/flows/update-api-key";
-import { areApiKeysSet } from "@/ai/flows/are-api-keys-set";
+import { getApiKeys } from "@/ai/flows/get-api-keys";
 import { Separator } from "@/components/ui/separator";
 
 const predefinedApiKeys: { name: string; key: string }[] = [
@@ -28,34 +27,33 @@ const predefinedApiKeys: { name: string; key: string }[] = [
 
 export default function ApiKeyManager({ className }: { className?: string }) {
   const [keyValues, setKeyValues] = useState<Record<string, string>>({});
+  const [savedKeys, setSavedKeys] = useState<Record<string, string>>({});
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
   const [newKeyName, setNewKeyName] = useState("");
   const [newKeyValue, setNewKeyValue] = useState("");
   const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({});
-  const [setKeys, setSetKeys] = useState<string[]>([]);
   const [checkingKeys, setCheckingKeys] = useState(true);
-  const [editingKey, setEditingKey] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
-    async function checkKeys() {
+    async function fetchKeys() {
       setCheckingKeys(true);
       try {
         const keyNames = predefinedApiKeys.map(k => k.key);
-        const result = await areApiKeysSet({ services: keyNames });
-        setSetKeys(result.setKeys);
+        const result = await getApiKeys({ services: keyNames });
+        setSavedKeys(result.keys);
       } catch (error) {
-        console.error("Failed to check API key status:", error);
+        console.error("Failed to fetch API key values:", error);
         toast({
-          title: "Could not check key status",
-          description: "There was an error checking the status of the API keys.",
+          title: "Could not fetch key values",
+          description: "There was an error fetching the values of the API keys.",
           variant: "destructive"
         });
       } finally {
         setCheckingKeys(false);
       }
     }
-    checkKeys();
+    fetchKeys();
   }, [toast]);
 
 
@@ -65,16 +63,6 @@ export default function ApiKeyManager({ className }: { className?: string }) {
 
   const toggleVisibility = (key: string) => {
     setVisibleKeys((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  const handleEdit = (key: string) => {
-    setEditingKey(key);
-    // When editing, clear the current input value for that key
-    setKeyValues((prev) => ({ ...prev, [key]: '' }));
-  };
-  
-  const handleCancelEdit = () => {
-    setEditingKey(null);
   };
 
   const handleSaveKey = async (key: string, name: string) => {
@@ -96,11 +84,8 @@ export default function ApiKeyManager({ className }: { className?: string }) {
           title: "Success",
           description: result.message || `${name} has been updated.`,
         });
-        setKeyValues((prev) => ({...prev, [key]: ''})); // Clear input on success
-        if (!setKeys.includes(key)) {
-            setSetKeys([...setKeys, key]); // Mark key as set
-        }
-        setEditingKey(null); // Exit edit mode
+        setKeyValues((prev) => ({...prev, [key]: ''})); 
+        setSavedKeys((prev) => ({ ...prev, [key]: value }));
       } else {
          throw new Error(result.message || 'An unknown error occurred.');
       }
@@ -132,7 +117,7 @@ export default function ApiKeyManager({ className }: { className?: string }) {
       if (result.success) {
         toast({
           title: "Success",
-          description: `New secret '${newKeyName.trim()}' has been saved. You might need to refresh the page to see it in a predefined list.`,
+          description: `New secret '${newKeyName.trim()}' has been saved. Refresh the page if you want to manage it from a predefined list.`,
         });
         setNewKeyName(""); 
         setNewKeyValue("");
@@ -174,55 +159,34 @@ export default function ApiKeyManager({ className }: { className?: string }) {
           <div className="space-y-4">
              <h3 className="text-lg font-medium">Predefined Secrets</h3>
             {predefinedApiKeys.map(({ name, key }) => {
-              const isSet = setKeys.includes(key);
-              const isEditing = editingKey === key;
+              const isSet = !!savedKeys[key];
               const isLoading = loadingKey === key;
               const isVisible = visibleKeys[key];
               
-              const isReadOnly = isSet && !isEditing;
-
               return (
                 <div key={key} className="space-y-2">
                   <Label htmlFor={key}>{name}</Label>
                   <div className="flex items-center gap-2">
                     <Input
                       id={key}
-                      type={isEditing && isVisible ? "text" : "password"}
-                      placeholder={isEditing ? "Enter new key value..." : ""}
-                      value={isReadOnly ? "••••••••••••••••" : (keyValues[key] || "")}
+                      type={isVisible ? "text" : "password"}
+                      placeholder={isSet ? "" : "Key not set..."}
+                      value={isVisible ? (keyValues[key] || savedKeys[key]) : "••••••••••••••••"}
                       onChange={(e) => handleInputChange(key, e.target.value)}
-                      readOnly={isReadOnly}
-                      className={isReadOnly ? "cursor-default focus-visible:ring-0" : ""}
                       disabled={isLoading}
                     />
                     
-                    {isEditing && (
-                      <Button variant="ghost" size="icon" onClick={() => toggleVisibility(key)} disabled={isLoading}>
-                        {isVisible ? <EyeOff /> : <Eye />}
-                        <span className="sr-only">
-                          {isVisible ? 'Hide' : 'Show'} key
-                        </span>
-                      </Button>
-                    )}
+                    <Button variant="ghost" size="icon" onClick={() => toggleVisibility(key)} disabled={isLoading || !isSet}>
+                      {isVisible ? <EyeOff /> : <Eye />}
+                      <span className="sr-only">
+                        {isVisible ? 'Hide' : 'Show'} key
+                      </span>
+                    </Button>
                     
-                    {isEditing ? (
-                      <>
-                        <Button onClick={() => handleSaveKey(key, name)} disabled={isLoading || !keyValues[key]} size="icon">
-                          {isLoading ? <Loader2 className="animate-spin" /> : <Save />}
-                          <span className="sr-only">Save {name}</span>
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={handleCancelEdit} disabled={isLoading}>
-                           <X />
-                           <span className="sr-only">Cancel edit</span>
-                        </Button>
-                      </>
-                    ) : (
-                      <Button variant="outline" size="icon" onClick={() => handleEdit(key)} disabled={isLoading}>
-                        <Edit />
-                        <span className="sr-only">Edit {name}</span>
-                      </Button>
-                    )}
-
+                    <Button onClick={() => handleSaveKey(key, name)} disabled={isLoading || !keyValues[key]} size="icon">
+                        {isLoading ? <Loader2 className="animate-spin" /> : <Save />}
+                        <span className="sr-only">Save {name}</span>
+                    </Button>
                   </div>
                 </div>
               )
