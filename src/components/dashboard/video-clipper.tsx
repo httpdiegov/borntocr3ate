@@ -16,11 +16,12 @@ import { Film, Bot, Loader2, Scissors, WholeWord } from "lucide-react";
 import { transcribeVideo } from "@/ai/flows/transcribe-video";
 import { analyzeVideoContent, type AnalyzedClip } from "@/ai/flows/analyze-video-content";
 import { generateUploadUrl } from "@/ai/flows/generate-upload-url";
+import { finalizeUpload } from "@/ai/flows/finalize-upload";
 import { Badge } from "../ui/badge";
 import { Textarea } from "../ui/textarea";
 
 const sanitizeFilename = (filename: string): string => {
-  // Replace spaces and special characters with underscores, remove others except dot
+  // Replace spaces and invalid characters with underscores
   return filename.replace(/[^a-zA-Z0-9._-]/g, '_');
 };
 
@@ -55,60 +56,59 @@ export default function VideoClipper({ className }: { className?: string }) {
   const handleTranscribe = async () => {
     if (!videoFile) return;
 
-    // Reset state
     setTranscription(null);
     setClips([]);
-
-    // 1. Get signed URL for upload
     setIsUploading(true);
-    toast({ title: "Preparing secure upload...", description: "This is the recommended way for large files." });
-    let gcsUri: string;
-    
+
     const safeFilename = sanitizeFilename(videoFile.name);
+    let publicUrl: string;
 
     try {
-      const { signedUrl, gcsUri: resultGcsUri } = await generateUploadUrl({
+      // 1. Get signed URL
+      toast({ title: "Preparing secure upload..." });
+      const { signedUrl, gcsUri, publicUrl: generatedPublicUrl } = await generateUploadUrl({
         filename: safeFilename,
         contentType: videoFile.type,
       });
-      gcsUri = resultGcsUri;
+      publicUrl = generatedPublicUrl;
 
       // 2. Upload file directly to GCS
       toast({ title: "Uploading video...", description: "Your file is being uploaded directly to secure storage." });
       const uploadResponse = await fetch(signedUrl, {
         method: 'PUT',
         body: videoFile,
-        headers: {
-          'Content-Type': videoFile.type,
-        },
+        headers: { 'Content-Type': videoFile.type },
       });
 
       if (!uploadResponse.ok) {
-        const errorText = await uploadResponse.text();
-        console.error("Upload failed with status:", uploadResponse.status, "and message:", errorText);
-        throw new Error(`Upload failed. Server responded with: ${errorText}`);
+        throw new Error(`Upload failed with status: ${uploadResponse.status}`);
       }
-      toast({ title: "Upload complete!", description: "Video is now securely stored." });
+      toast({ title: "Upload complete!" });
+      
+      // 3. Finalize upload by making the file public
+      toast({ title: "Finalizing file..." });
+      await finalizeUpload({ gcsUri });
+
     } catch (error: any) {
-        console.error("Error during upload process:", error);
-        toast({
-          title: "Upload Error",
-          description: error.message || "Could not prepare or complete the video upload.",
-          variant: "destructive",
-        });
-        setIsUploading(false);
-        return;
+      console.error("Error during upload/finalization:", error);
+      toast({
+        title: "Upload Error",
+        description: error.message || "Could not complete the video upload process.",
+        variant: "destructive",
+      });
+      setIsUploading(false);
+      return;
     } finally {
       setIsUploading(false);
     }
     
-    // 3. Transcribe from GCS URI
+    // 4. Transcribe from Public URL
     setIsTranscribing(true);
-    toast({ title: "Starting transcription...", description: "The AI is processing the video. This may take a few minutes." });
+    toast({ title: "Starting transcription...", description: "AI is processing the video. This may take a few minutes." });
 
     try {
         const result = await transcribeVideo({ 
-          gcsUri,
+          publicUrl,
           contentType: videoFile.type,
         });
         setTranscription(result.transcription);
@@ -117,7 +117,7 @@ export default function VideoClipper({ className }: { className?: string }) {
         console.error("Error transcribing video:", error);
         toast({
           title: "Transcription Error",
-          description: error.message || "Could not transcribe the video. Check the console for details.",
+          description: error.message || "Could not transcribe the video.",
           variant: "destructive",
         });
     } finally {
