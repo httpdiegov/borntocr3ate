@@ -9,5 +9,5 @@ import '@/ai/tools/get-api-key';
 import '@/ai/flows/update-api-key';
 import '@/ai/flows/are-api-keys-set';
 import '@/ai/flows/get-api-keys'; 
-import '@/ai/flows/analyze-video-content'; // Import the new flow
+import '@/ai/flows/analyze-video-content';
 import './tools/get-api-key-internal';
