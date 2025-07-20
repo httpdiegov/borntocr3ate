@@ -24,7 +24,7 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: 'https',
-        hostname: '*.xx.fbcdn.net',
+        hostname: 'scontent*.xx.fbcdn.net',
         port: '',
         pathname: '/**',
       },
