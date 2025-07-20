@@ -3,9 +3,9 @@
 /**
  * @fileOverview Un flujo de IA para analizar el contenido de un video y extraer clips virales.
  */
-
+import { ai } from '@/ai/genkit';
 import { z } from 'zod';
-import { getApiKey } from '../tools/get-api-key';
+
 
 // Define el esquema para la entrada del flujo
 const AnalyzeVideoInputSchema = z.object({
@@ -30,15 +30,12 @@ const AnalyzeVideoOutputSchema = z.object({
 });
 export type AnalyzeVideoOutput = z.infer<typeof AnalyzeVideoOutputSchema>;
 
-export async function analyzeVideoContent(input: AnalyzeVideoInput): Promise<AnalyzeVideoOutput> {
-  console.log("Analizando transcripción para encontrar clips...");
 
-  const apiKey = await getApiKey({ service: 'GEMINI_API_KEY' });
-  if (!apiKey) {
-    throw new Error('Gemini API key not found in Secret Manager.');
-  }
-  
-  const prompt = `Eres un experto en redes sociales y edición de video, especializado en identificar momentos virales en contenido largo.
+const videoAnalysisPrompt = ai.definePrompt({
+    name: 'videoAnalysisPrompt',
+    input: { schema: AnalyzeVideoInputSchema },
+    output: { schema: AnalyzeVideoOutputSchema },
+    prompt: `Eres un experto en redes sociales y edición de video, especializado en identificar momentos virales en contenido largo.
 
   Tu tarea es analizar la siguiente transcripción de un video y extraer de 2 a 4 clips potenciales que sean perfectos para plataformas como TikTok, Instagram Reels o YouTube Shorts.
   
@@ -58,41 +55,24 @@ export async function analyzeVideoContent(input: AnalyzeVideoInput): Promise<Ana
 
   Aquí está la transcripción:
   ---
-  ${input.transcription}
+  {{{transcription}}}
   ---
-  `;
+  `
+});
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
-  const requestBody = {
-    contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: {
-      response_mime_type: "application/json",
-      // The API requires the schema to be an object, not the Zod instance itself.
-      response_schema: AnalyzeVideoOutputSchema.describe(), 
-    },
-  };
-  
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(requestBody),
-    });
+const analyzeVideoContentFlow = ai.defineFlow(
+  {
+    name: 'analyzeVideoContentFlow',
+    inputSchema: AnalyzeVideoInputSchema,
+    outputSchema: AnalyzeVideoOutputSchema,
+  },
+  async (input) => {
+    console.log("Analizando transcripción para encontrar clips...");
+    
+    const { output } = await videoAnalysisPrompt(input);
 
-    if (!response.ok) {
-      const errorBody = await response.text();
-      console.error("Google AI API Error Response:", errorBody);
-      throw new Error(`Google AI API request failed with status ${response.status}: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    const jsonText = data.candidates[0].content.parts[0].text;
-    const output = JSON.parse(jsonText);
-
-    if (!output || !Array.isArray(output.clips) || output.clips.length === 0) {
+    if (!output || !Array.isArray(output.clips)) {
         console.error("La respuesta de la IA no fue válida o no contenía clips:", output);
         throw new Error("La IA no pudo generar ningún clip con el formato esperado.");
     }
@@ -101,10 +81,11 @@ export async function analyzeVideoContent(input: AnalyzeVideoInput): Promise<Ana
     output.clips.sort((a: AnalyzedClip, b: AnalyzedClip) => b.viralityScore - a.viralityScore);
 
     console.log(`Análisis completo. Se encontraron ${output.clips.length} clips.`);
-    return output as AnalyzeVideoOutput;
-
-  } catch (error) {
-    console.error("Error analyzing video content:", error);
-    throw error;
+    return output;
   }
+);
+
+
+export async function analyzeVideoContent(input: AnalyzeVideoInput): Promise<AnalyzeVideoOutput> {
+  return analyzeVideoContentFlow(input);
 }

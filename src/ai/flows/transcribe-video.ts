@@ -1,11 +1,10 @@
 'use server';
 
 /**
- * @fileOverview A flow for transcribing video content using a direct API call.
+ * @fileOverview A flow for transcribing video content using Genkit.
  */
-
+import { ai } from '@/ai/genkit';
 import { z } from 'zod';
-import { getApiKey } from '../tools/get-api-key';
 
 // Define the schema for the input: a video file as a data URI and its content type
 const TranscribeVideoInputSchema = z.object({
@@ -26,71 +25,38 @@ export type TranscribeVideoOutput = z.infer<
   typeof TranscribeVideoOutputSchema
 >;
 
+const transcriptionPrompt = ai.definePrompt({
+    name: 'transcriptionPrompt',
+    input: { schema: TranscribeVideoInputSchema },
+    output: { schema: TranscribeVideoOutputSchema },
+    model: 'googleai/gemini-1.5-flash',
+    prompt: `Transcribe the audio from the following video accurately. Provide only the text of the transcription.
+    
+    Video: {{media url=videoDataUri contentType=contentType}}
+    `
+});
+
+const transcribeVideoFlow = ai.defineFlow(
+  {
+    name: 'transcribeVideoFlow',
+    inputSchema: TranscribeVideoInputSchema,
+    outputSchema: TranscribeVideoOutputSchema,
+  },
+  async (input) => {
+    console.log('Starting video transcription with Genkit flow...');
+    
+    const { output } = await transcriptionPrompt(input);
+    
+    if (!output?.transcription) {
+        console.error("Transcription failed. AI did not return valid text.");
+        throw new Error("La IA no pudo generar una transcripción.");
+    }
+    
+    console.log('Transcription completed successfully.');
+    return output;
+  }
+);
+
 export async function transcribeVideo(input: TranscribeVideoInput): Promise<TranscribeVideoOutput> {
-    console.log('Starting video transcription with direct API call...');
-    
-    const apiKey = await getApiKey({ service: 'GEMINI_API_KEY' });
-    if (!apiKey) {
-      throw new Error('Gemini API key not found in Secret Manager.');
-    }
-
-    // The API expects the base64 data without the data URI prefix.
-    // This robustly handles both cases: with or without the prefix.
-    const base64Data = input.videoDataUri.includes(',') 
-      ? input.videoDataUri.split(',')[1] 
-      : input.videoDataUri;
-      
-    if (!base64Data) {
-      throw new Error('Invalid data URI: could not extract Base64 data.');
-    }
-    
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-
-    const requestBody = {
-      contents: [
-        {
-          parts: [
-            { text: "Transcribe the audio from the following video accurately. Provide only the text of the transcription." },
-            {
-              inline_data: {
-                mime_type: input.contentType,
-                data: base64Data,
-              },
-            },
-          ],
-        },
-      ],
-    };
-
-    try {
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(requestBody),
-        });
-
-        if (!response.ok) {
-            const errorBody = await response.text();
-            console.error("Google AI API Error Response:", errorBody);
-            throw new Error(`Google AI API request failed with status ${response.status}: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-
-        const transcription = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-        if (typeof transcription !== 'string') {
-             console.error("Transcription failed. Invalid response structure from API:", data);
-             throw new Error("La IA no pudo generar una transcripción. Respuesta inesperada.");
-        }
-        
-        console.log('Transcription completed successfully.');
-        return { transcription };
-
-    } catch (error) {
-        console.error("Error during video transcription fetch:", error);
-        throw error;
-    }
+    return transcribeVideoFlow(input);
 }
