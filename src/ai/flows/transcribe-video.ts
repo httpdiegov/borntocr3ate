@@ -2,17 +2,14 @@
 
 /**
  * @fileOverview A flow for transcribing video content using Genkit.
+ * This flow now accepts a Google Cloud Storage URI instead of a data URI.
  */
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 
-// Define the schema for the input: a video file as a data URI
+// Define the schema for the input: a GCS URI
 const TranscribeVideoInputSchema = z.object({
-  videoDataUri: z
-    .string()
-    .describe(
-      "A video file, as a data URI that must include a MIME type and use Base64 encoding. Expected format: 'data:<mimetype>;base64,<encoded_data>'"
-    ),
+  gcsUri: z.string().describe('The Google Cloud Storage URI of the video file (e.g., "gs://bucket-name/video.mp4").'),
   contentType: z.string().describe('The MIME type of the video file (e.g., "video/mp4").'),
 });
 export type TranscribeVideoInput = z.infer<typeof TranscribeVideoInputSchema>;
@@ -26,18 +23,17 @@ export type TranscribeVideoOutput = z.infer<
 >;
 
 /**
- * Transcribes a video using the Gemini API.
- * This function uses a direct ai.generate call to correctly handle multimodal input.
- * @param input The video data to transcribe.
+ * Transcribes a video from a GCS URI using the Gemini API.
+ * @param input The video GCS URI to transcribe.
  * @returns The transcription text.
  */
 export async function transcribeVideo(input: TranscribeVideoInput): Promise<TranscribeVideoOutput> {
-  console.log('Starting video transcription with direct ai.generate call...');
+  console.log(`Starting video transcription from GCS URI: ${input.gcsUri}`);
   
   const { output } = await ai.generate({
       model: 'googleai/gemini-1.5-flash',
       prompt: [
-        { media: { url: input.videoDataUri, contentType: input.contentType } },
+        { media: { url: input.gcsUri, contentType: input.contentType } },
         { text: 'Transcribe the audio from the following video accurately. Provide only the text of the transcription.' },
       ],
       output: {

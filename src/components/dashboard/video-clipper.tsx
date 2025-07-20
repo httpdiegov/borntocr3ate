@@ -11,34 +11,17 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Film, Bot, Loader2, Scissors, WholeWord } from "lucide-react";
+import { Film, Bot, Loader2, Scissors, WholeWord, UploadCloud } from "lucide-react";
 import { transcribeVideo } from "@/ai/flows/transcribe-video";
 import { analyzeVideoContent, type AnalyzedClip } from "@/ai/flows/analyze-video-content";
+import { generateUploadUrl } from "@/ai/flows/generate-upload-url";
 import { Badge } from "../ui/badge";
 import { Textarea } from "../ui/textarea";
-
-// Helper to convert a File to a Base64 Data URI
-const fileToDataUri = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === 'string') {
-          resolve(reader.result);
-        } else {
-          reject(new Error('FileReader did not return a string.'));
-        }
-      };
-      reader.onerror = (error) => {
-        reject(error);
-      };
-      reader.readAsDataURL(file);
-    });
-};
-
 
 export default function VideoClipper({ className }: { className?: string }) {
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [transcription, setTranscription] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [clips, setClips] = useState<AnalyzedClip[]>([]);
@@ -51,11 +34,11 @@ export default function VideoClipper({ className }: { className?: string }) {
         setVideoFile(file);
         setClips([]);
         setTranscription(null);
-        toast({ title: "Video cargado", description: file.name });
+        toast({ title: "Video selected", description: file.name });
       } else {
         toast({
-          title: "Archivo no válido",
-          description: "Por favor, selecciona un archivo de video.",
+          title: "Invalid file type",
+          description: "Please select a video file.",
           variant: "destructive",
         });
       }
@@ -65,24 +48,65 @@ export default function VideoClipper({ className }: { className?: string }) {
   const handleTranscribe = async () => {
     if (!videoFile) return;
 
-    setIsTranscribing(true);
+    // Reset state
     setTranscription(null);
     setClips([]);
-    toast({ title: "Iniciando transcripción...", description: "La IA está procesando el video. Esto puede tardar unos minutos." });
+
+    // 1. Get signed URL for upload
+    setIsUploading(true);
+    toast({ title: "Preparing secure upload...", description: "This is the recommended way for large files." });
+    let gcsUri: string;
 
     try {
-        const videoDataUri = await fileToDataUri(videoFile);
+      const { signedUrl, gcsUri: resultGcsUri } = await generateUploadUrl({
+        filename: videoFile.name,
+        contentType: videoFile.type,
+      });
+      gcsUri = resultGcsUri;
+
+      // 2. Upload file directly to GCS
+      toast({ title: "Uploading video...", description: "Your file is being uploaded directly to secure storage." });
+      const uploadResponse = await fetch(signedUrl, {
+        method: 'PUT',
+        body: videoFile,
+        headers: {
+          'Content-Type': videoFile.type,
+        },
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error('Upload failed. Please try again.');
+      }
+      toast({ title: "Upload complete!", description: "Video is now securely stored." });
+    } catch (error: any) {
+        console.error("Error during upload process:", error);
+        toast({
+          title: "Upload Error",
+          description: error.message || "Could not prepare or complete the video upload.",
+          variant: "destructive",
+        });
+        setIsUploading(false);
+        return;
+    } finally {
+      setIsUploading(false);
+    }
+    
+    // 3. Transcribe from GCS URI
+    setIsTranscribing(true);
+    toast({ title: "Starting transcription...", description: "The AI is processing the video. This may take a few minutes." });
+
+    try {
         const result = await transcribeVideo({ 
-          videoDataUri: videoDataUri,
+          gcsUri,
           contentType: videoFile.type,
         });
         setTranscription(result.transcription);
-        toast({ title: "¡Transcripción completada!", description: "Ahora puedes analizar el texto para encontrar clips."});
+        toast({ title: "Transcription complete!", description: "You can now analyze the text to find clips."});
     } catch (error) {
         console.error("Error transcribing video:", error);
         toast({
-          title: "Error en la transcripción",
-          description: "No se pudo transcribir el video. Revisa la consola para más detalles.",
+          title: "Transcription Error",
+          description: "Could not transcribe the video. Check the console for details.",
           variant: "destructive",
         });
     } finally {
@@ -90,12 +114,11 @@ export default function VideoClipper({ className }: { className?: string }) {
     }
   }
 
-
   const handleAnalyze = async () => {
     if (!transcription) {
       toast({
-        title: "No hay transcripción",
-        description: "Por favor, transcribe el video primero.",
+        title: "No transcription available",
+        description: "Please transcribe the video first.",
         variant: "destructive",
       });
       return;
@@ -109,15 +132,15 @@ export default function VideoClipper({ className }: { className?: string }) {
       
       setClips(result.clips);
       toast({
-        title: "Análisis completado",
-        description: `Se han identificado ${result.clips.length} clips potenciales.`,
+        title: "Analysis complete",
+        description: `Identified ${result.clips.length} potential clips.`,
       });
 
     } catch (error) {
       console.error("Error analyzing video:", error);
       toast({
-        title: "Error en el análisis",
-        description: "No se pudieron generar los clips.",
+        title: "Analysis Error",
+        description: "Could not generate clips.",
         variant: "destructive",
       });
     } finally {
@@ -125,7 +148,8 @@ export default function VideoClipper({ className }: { className?: string }) {
     }
   };
   
-  const isLoading = isTranscribing || isAnalyzing;
+  const isLoading = isUploading || isTranscribing || isAnalyzing;
+  const loadingStep = isUploading ? "Uploading..." : isTranscribing ? "Transcribing..." : "Analyzing...";
 
   return (
     <Card className={`${className} flex flex-col`}>
@@ -135,7 +159,7 @@ export default function VideoClipper({ className }: { className?: string }) {
           Video Clipper
         </CardTitle>
         <CardDescription>
-          Sube un video, la IA lo transcribirá y encontrará los momentos clave para crear clips.
+          Upload a video, the AI will transcribe it and find key moments to create clips.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex-grow space-y-4">
@@ -143,12 +167,12 @@ export default function VideoClipper({ className }: { className?: string }) {
           <Input type="file" accept="video/*" onChange={handleFileChange} disabled={isLoading} />
           <div className="grid grid-cols-2 gap-2">
             <Button onClick={handleTranscribe} className="w-full" disabled={!videoFile || isLoading}>
-                {isTranscribing ? <Loader2 className="animate-spin mr-2" /> : <WholeWord className="mr-2" />}
-                {isTranscribing ? "Transcribiendo..." : "1. Transcribir"}
+                {isUploading || isTranscribing ? <Loader2 className="animate-spin mr-2" /> : <WholeWord className="mr-2" />}
+                {isUploading ? "Uploading..." : isTranscribing ? "Transcribing..." : "1. Process Video"}
             </Button>
             <Button onClick={handleAnalyze} className="w-full" disabled={!transcription || isLoading}>
                 {isAnalyzing ? <Loader2 className="animate-spin mr-2" /> : <Bot className="mr-2" />}
-                {isAnalyzing ? "Analizando..." : "2. Encontrar Clips"}
+                {isAnalyzing ? "Analyzing..." : "2. Find Clips"}
             </Button>
           </div>
         </div>
@@ -158,19 +182,20 @@ export default function VideoClipper({ className }: { className?: string }) {
              <div className="text-center text-muted-foreground py-12">
                 <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
                 <p>
-                    {isTranscribing ? "Transcribiendo video... Esto puede tardar." : "La IA está analizando el contenido..."}
+                    {loadingStep}
                 </p>
+                <p className="text-sm">This may take a few minutes for large videos.</p>
               </div>
           )}
 
           {transcription && !isTranscribing && (
             <div>
-              <h3 className="font-semibold mb-2">Transcripción del Video:</h3>
+              <h3 className="font-semibold mb-2">Video Transcription:</h3>
               <Textarea 
                 readOnly 
                 value={transcription} 
                 className="h-32 bg-muted/50"
-                placeholder="Aquí aparecerá la transcripción..."
+                placeholder="The transcription will appear here..."
               />
             </div>
           )}
@@ -191,7 +216,7 @@ export default function VideoClipper({ className }: { className?: string }) {
                   <div className="flex gap-2 pt-2">
                       <Button size="sm" variant="outline" className="w-full" disabled>
                         <Scissors className="mr-2 h-4 w-4"/>
-                        Crear Clip (Próximamente)
+                        Create Clip (Coming Soon)
                       </Button>
                   </div>
                 </CardContent>
@@ -200,7 +225,7 @@ export default function VideoClipper({ className }: { className?: string }) {
           ) : (
             !isLoading && !transcription && (
                 <div className="text-center text-muted-foreground py-12">
-                    <p>Carga un video para empezar.</p>
+                    <p>Upload a video to get started.</p>
                 </div>
             )
           )}

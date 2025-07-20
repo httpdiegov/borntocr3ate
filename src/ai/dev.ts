@@ -12,4 +12,5 @@ import '@/ai/flows/are-api-keys-set';
 import '@/ai/flows/get-api-keys'; 
 import '@/ai/flows/analyze-video-content';
 import '@/ai/flows/transcribe-video';
+import '@/ai/flows/generate-upload-url';
 import './tools/get-api-key-internal';
