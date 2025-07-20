@@ -30,55 +30,49 @@ const AnalyzeVideoOutputSchema = z.object({
 });
 export type AnalyzeVideoOutput = z.infer<typeof AnalyzeVideoOutputSchema>;
 
-// Define el flujo que orquesta la llamada al prompt y que será exportado
-export const analyzeVideoContent = ai.defineFlow(
-  {
-    name: 'analyzeVideoContentFlow',
-    inputSchema: AnalyzeVideoInputSchema,
-    outputSchema: AnalyzeVideoOutputSchema,
-  },
-  async (input) => {
-    console.log("Analizando transcripción para encontrar clips...");
-    
-    const { output } = await ai.generate({
-      model: 'googleai/gemini-1.5-flash',
-      prompt: `Eres un experto en redes sociales y edición de video, especializado en identificar momentos virales en contenido largo.
-    
-      Tu tarea es analizar la siguiente transcripción de un video y extraer de 2 a 4 clips potenciales que sean perfectos para plataformas como TikTok, Instagram Reels o YouTube Shorts.
-      
-      Para cada clip, debes:
-      1.  Crear un título corto y muy atractivo que genere curiosidad.
-      2.  Escribir un resumen conciso de lo que trata el clip.
-      3.  Estimar un timestamp de inicio y fin (simulado, ya que no tienes el video real).
-      4.  Asignarle una "puntuación de viralidad" del 1 al 10, donde 10 es un éxito viral garantizado.
-      5.  Asignar un ID único a cada clip.
+// This is now a regular async function, not a Genkit Flow.
+// This avoids initialization issues with the Genkit runner.
+export async function analyzeVideoContent(input: AnalyzeVideoInput): Promise<AnalyzeVideoOutput> {
+  console.log("Analizando transcripción para encontrar clips...");
   
-      Prioriza momentos que contengan:
-      - Preguntas provocadoras.
-      - Declaraciones audaces o controvertidas.
-      - Consejos prácticos y rápidos.
-      - Momentos emocionales.
-      - "Ganchos" que capturen la atención en los primeros 3 segundos.
+  const { output } = await ai.generate({
+    model: 'googleai/gemini-1.5-flash',
+    prompt: `Eres un experto en redes sociales y edición de video, especializado en identificar momentos virales en contenido largo.
   
-      Aquí está la transcripción:
-      ---
-      ${input.transcription}
-      ---
-      `,
-      output: {
-        schema: AnalyzeVideoOutputSchema,
-      }
-    });
+    Tu tarea es analizar la siguiente transcripción de un video y extraer de 2 a 4 clips potenciales que sean perfectos para plataformas como TikTok, Instagram Reels o YouTube Shorts.
+    
+    Para cada clip, debes:
+    1.  Crear un título corto y muy atractivo que genere curiosidad.
+    2.  Escribir un resumen conciso de lo que trata el clip.
+    3.  Estimar un timestamp de inicio y fin (simulado, ya que no tienes el video real).
+    4.  Asignarle una "puntuación de viralidad" del 1 al 10, donde 10 es un éxito viral garantizado.
+    5.  Asignar un ID único a cada clip.
 
-    if (!output || !Array.isArray(output.clips) || output.clips.length === 0) {
-        console.error("La respuesta de la IA no fue válida o no contenía clips:", output);
-        throw new Error("La IA no pudo generar ningún clip con el formato esperado.");
+    Prioriza momentos que contengan:
+    - Preguntas provocadoras.
+    - Declaraciones audaces o controvertidas.
+    - Consejos prácticos y rápidos.
+    - Momentos emocionales.
+    - "Ganchos" que capturen la atención en los primeros 3 segundos.
+
+    Aquí está la transcripción:
+    ---
+    ${input.transcription}
+    ---
+    `,
+    output: {
+      schema: AnalyzeVideoOutputSchema,
     }
-    
-    // Ordenar los clips por puntuación de viralidad descendente
-    output.clips.sort((a, b) => b.viralityScore - a.viralityScore);
+  });
 
-    console.log(`Análisis completo. Se encontraron ${output.clips.length} clips.`);
-    return output;
+  if (!output || !Array.isArray(output.clips) || output.clips.length === 0) {
+      console.error("La respuesta de la IA no fue válida o no contenía clips:", output);
+      throw new Error("La IA no pudo generar ningún clip con el formato esperado.");
   }
-);
+  
+  // Ordenar los clips por puntuación de viralidad descendente
+  output.clips.sort((a, b) => b.viralityScore - a.viralityScore);
+
+  console.log(`Análisis completo. Se encontraron ${output.clips.length} clips.`);
+  return output;
+}

@@ -26,18 +26,12 @@ export type TranscribeVideoOutput = z.infer<
   typeof TranscribeVideoOutputSchema
 >;
 
-// Define the flow that will be called from the frontend
-export const transcribeVideo = ai.defineFlow(
-  {
-    name: 'transcribeVideoFlow',
-    inputSchema: TranscribeVideoInputSchema,
-    outputSchema: TranscribeVideoOutputSchema,
-  },
-  async (input) => {
+// This is now a regular async function, not a Genkit Flow.
+// This avoids initialization issues with the Genkit runner.
+export async function transcribeVideo(input: TranscribeVideoInput): Promise<TranscribeVideoOutput> {
     console.log('Starting video transcription with Gemini 1.5 Flash...');
     
     // Use the core generate function for more direct control.
-    // This avoids issues with prompt templating for complex media types.
     const { output } = await ai.generate({
         model: 'googleai/gemini-1.5-flash',
         prompt: {
@@ -59,5 +53,4 @@ export const transcribeVideo = ai.defineFlow(
 
     console.log('Transcription completed successfully.');
     return { transcription: output.transcription };
-  }
-);
+}
