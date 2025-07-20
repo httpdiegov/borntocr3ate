@@ -48,7 +48,11 @@ function parseTagsFromLabels(labels: { [key: string]: string } | null | undefine
       .filter(key => key.startsWith('tag-'))
       .map(key => {
         const tag = key.substring(4).replace(/-/g, ' ');
-        // Capitalize first letter of each word
+        // Handle special cases like "IA"
+        if (tag.toLowerCase() === 'ia') {
+            return 'IA';
+        }
+        // Capitalize first letter of each word for other tags
         return tag.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
       });
 }
