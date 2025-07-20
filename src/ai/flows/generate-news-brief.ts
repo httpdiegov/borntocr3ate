@@ -35,7 +35,7 @@ const prompt = ai.definePrompt({
   name: 'generateNewsBriefPrompt',
   input: {schema: GenerateNewsBriefInputSchema},
   output: {schema: GenerateNewsBriefOutputSchema},
-  prompt: `You are a world-class news editor. Your task is to provide a summary of the 5 most important news stories of the day.`,
+  prompt: `Eres un editor de noticias de clase mundial. Tu tarea es proporcionar un resumen de las 5 noticias más importantes del día, en español.`,
 });
 
 const generateNewsBriefFlow = ai.defineFlow(
