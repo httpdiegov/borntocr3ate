@@ -60,23 +60,29 @@ async function generateUrl(input: GenerateUploadUrlInput): Promise<GenerateUploa
         // Create the bucket.
         await storage.createBucket(bucketName);
         console.log(`Bucket '${bucketName}' created.`);
-        
-        // SET CORS configuration to allow browser uploads.
-        await bucket.setCorsConfiguration([
-            {
-                maxAgeSeconds: 3600, // Cache preflight responses for 1 hour
-                method: ['PUT'], // Allow PUT requests for the upload
-                origin: ['*'], // Allow all origins (safe due to signed URL)
-                responseHeader: ['Content-Type'],
-            },
-        ]);
-        console.log(`CORS configuration set for bucket '${bucketName}'.`);
-
     } catch (creationError: any) {
         console.error(`Failed to create bucket '${bucketName}':`, creationError);
         throw new Error(`Failed to create storage bucket: ${creationError.message}`);
     }
   }
+
+  // Ensure CORS is set correctly on the bucket to allow uploads from the browser.
+  // This is set on every run to ensure it's always correct.
+  try {
+    await bucket.setCorsConfiguration([
+        {
+            maxAgeSeconds: 3600, // Cache preflight responses for 1 hour
+            method: ['PUT'], // Allow PUT requests for the upload
+            origin: ['*'], // Allow all origins (safe due to signed URL)
+            responseHeader: ['Content-Type'],
+        },
+    ]);
+    console.log(`CORS configuration set for bucket '${bucketName}'.`);
+  } catch(corsError: any) {
+    console.error(`Failed to set CORS configuration on bucket '${bucketName}':`, corsError);
+    // We can still try to proceed, but it might fail on the client.
+  }
+
 
   const file = bucket.file(input.filename);
   
@@ -109,4 +115,3 @@ export const generateUploadUrl = ai.defineFlow(
     },
     generateUrl
 );
-
