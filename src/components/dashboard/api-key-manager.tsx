@@ -179,7 +179,6 @@ export default function ApiKeyManager({ className }: { className?: string }) {
               const isLoading = loadingKey === key;
               const isVisible = visibleKeys[key];
               
-              // The input is readonly if it's set AND we are NOT editing it.
               const isReadOnly = isSet && !isEditing;
 
               return (
@@ -188,7 +187,7 @@ export default function ApiKeyManager({ className }: { className?: string }) {
                   <div className="flex items-center gap-2">
                     <Input
                       id={key}
-                      type={isVisible ? "text" : "password"}
+                      type={isEditing && isVisible ? "text" : "password"}
                       placeholder={isEditing ? "Enter new key value..." : ""}
                       value={isReadOnly ? "••••••••••••••••" : (keyValues[key] || "")}
                       onChange={(e) => handleInputChange(key, e.target.value)}
@@ -197,12 +196,14 @@ export default function ApiKeyManager({ className }: { className?: string }) {
                       disabled={isLoading}
                     />
                     
-                    <Button variant="ghost" size="icon" onClick={() => toggleVisibility(key)} disabled={isLoading || isReadOnly}>
-                      {isVisible ? <EyeOff /> : <Eye />}
-                      <span className="sr-only">
-                        {isVisible ? 'Hide' : 'Show'} key
-                      </span>
-                    </Button>
+                    {isEditing && (
+                      <Button variant="ghost" size="icon" onClick={() => toggleVisibility(key)} disabled={isLoading}>
+                        {isVisible ? <EyeOff /> : <Eye />}
+                        <span className="sr-only">
+                          {isVisible ? 'Hide' : 'Show'} key
+                        </span>
+                      </Button>
+                    )}
                     
                     {isEditing ? (
                       <>
@@ -273,5 +274,3 @@ export default function ApiKeyManager({ className }: { className?: string }) {
     </Card>
   );
 }
-
-    
