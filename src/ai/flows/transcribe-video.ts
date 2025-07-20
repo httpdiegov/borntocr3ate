@@ -12,7 +12,7 @@ const TranscribeVideoInputSchema = z.object({
   videoDataUri: z
     .string()
     .describe(
-      "A video file, as a data URI that must include a MIME type and use Base64 encoding. Expected format: 'data:<mimetype>;base64,<encoded_data>'."
+      "A video file, as a data URI that must include a MIME type and use Base64 encoding. Expected format: 'data:<mimetype>;base64,<encoded_data>'"
     ),
   contentType: z.string().describe('The MIME type of the video file (e.g., "video/mp4").'),
 });
@@ -36,8 +36,8 @@ const transcriptionPrompt = ai.definePrompt({
   
   Video: {{media url=videoDataUri contentType=contentType}}`,
   
-  // Use a model that supports video input like Gemini 1.5 Pro or Flash.
-  model: 'googleai/gemini-1.5-flash', 
+  // Use a more robust model that supports video input like Gemini 1.5 Pro.
+  model: 'googleai/gemini-1.5-pro-preview-0514', 
 });
 
 // Define the flow that will be called from the frontend
@@ -48,7 +48,7 @@ export const transcribeVideo = ai.defineFlow(
     outputSchema: TranscribeVideoOutputSchema,
   },
   async (input) => {
-    console.log('Starting video transcription...');
+    console.log('Starting video transcription with Gemini 1.5 Pro...');
     
     // Pass the input directly to the prompt.
     // Genkit's prompt templating will handle the media object creation.
