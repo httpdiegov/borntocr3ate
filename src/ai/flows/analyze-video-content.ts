@@ -6,6 +6,7 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
+import { getApiKey } from '../tools/get-api-key';
 
 // Define el esquema para la entrada del flujo
 const AnalyzeVideoInputSchema = z.object({
@@ -34,6 +35,11 @@ export type AnalyzeVideoOutput = z.infer<typeof AnalyzeVideoOutputSchema>;
 // This avoids initialization issues with the Genkit runner.
 export async function analyzeVideoContent(input: AnalyzeVideoInput): Promise<AnalyzeVideoOutput> {
   console.log("Analizando transcripción para encontrar clips...");
+
+  const apiKey = await getApiKey({ service: 'GEMINI_API_KEY' });
+  if (!apiKey) {
+    throw new Error('Gemini API key not found in Secret Manager.');
+  }
   
   const { output } = await ai.generate({
     model: 'googleai/gemini-1.5-flash',
@@ -62,6 +68,9 @@ export async function analyzeVideoContent(input: AnalyzeVideoInput): Promise<Ana
     `,
     output: {
       schema: AnalyzeVideoOutputSchema,
+    },
+    config: {
+      apiKey: apiKey,
     }
   });
 

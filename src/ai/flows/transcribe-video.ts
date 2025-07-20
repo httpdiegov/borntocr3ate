@@ -6,6 +6,7 @@
 
 import { z } from 'zod';
 import { ai } from '@/ai/genkit';
+import { getApiKey } from '../tools/get-api-key';
 
 // Define the schema for the input: a video file as a data URI and its content type
 const TranscribeVideoInputSchema = z.object({
@@ -31,6 +32,11 @@ export type TranscribeVideoOutput = z.infer<
 export async function transcribeVideo(input: TranscribeVideoInput): Promise<TranscribeVideoOutput> {
     console.log('Starting video transcription with Gemini 1.5 Flash...');
     
+    const apiKey = await getApiKey({ service: 'GEMINI_API_KEY' });
+    if (!apiKey) {
+      throw new Error('Gemini API key not found in Secret Manager.');
+    }
+
     // Use the core generate function for more direct control.
     const { output } = await ai.generate({
         model: 'googleai/gemini-1.5-flash',
@@ -43,6 +49,9 @@ export async function transcribeVideo(input: TranscribeVideoInput): Promise<Tran
         },
         output: {
             schema: TranscribeVideoOutputSchema
+        },
+        config: {
+            apiKey: apiKey,
         }
     });
     

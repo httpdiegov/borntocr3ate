@@ -4,11 +4,9 @@ import {config} from 'dotenv';
 
 config();
 
-// Initialize the plugin with the API key from environment variables.
-// This is a more direct way for debugging authentication issues.
-const googleAIPlugin = googleAI({
-  apiKey: process.env.GEMINI_API_KEY,
-});
+// Initialize the plugin without a global API key.
+// The key will be provided just-in-time in each generate call.
+const googleAIPlugin = googleAI();
 
 
 export const ai = genkit({
