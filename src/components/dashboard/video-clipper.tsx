@@ -87,7 +87,10 @@ export default function VideoClipper({ className }: { className?: string }) {
       
       // 3. Finalize upload by making the file public
       toast({ title: "Finalizing file..." });
-      await finalizeUpload({ gcsUri });
+      const finalizeResult = await finalizeUpload({ gcsUri });
+      if (!finalizeResult.success) {
+        throw new Error(finalizeResult.message);
+      }
 
     } catch (error: any) {
       console.error("Error during upload/finalization:", error);

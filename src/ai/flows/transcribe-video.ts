@@ -8,7 +8,7 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 
-// Define the schema for the input: a GCS URI
+// Define the schema for the input: a public URL
 const TranscribeVideoInputSchema = z.object({
   publicUrl: z.string().url().describe('The public HTTPS URL of the video file.'),
   contentType: z.string().describe('The MIME type of the video file (e.g., "video/mp4").'),
