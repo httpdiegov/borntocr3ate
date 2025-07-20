@@ -29,9 +29,7 @@ function getSecretManagerClient() {
 
 
 const UpdateApiKeyInputSchema = z.object({
-  service: z
-    .enum(['youtube_api_key', 'instagram_access_token', 'instagram_business_account_id', 'GEMINI_API_KEY'])
-    .describe('The service for which to update the API key.'),
+  service: z.string().describe('The name of the secret to create or update (e.g., youtube_api_key).'),
   value: z.string().describe('The new API key value.'),
 });
 export type UpdateApiKeyInput = z.infer<typeof UpdateApiKeyInputSchema>;
@@ -47,6 +45,10 @@ async function updateApiKeyInSecretManager(input: UpdateApiKeyInput): Promise<Up
   const projectId = process.env.GCLOUD_PROJECT;
   if (!projectId) {
     return { success: false, message: 'GCLOUD_PROJECT environment variable not set.' };
+  }
+
+  if (!input.service || !input.value) {
+    return { success: false, message: 'Service name and value cannot be empty.' };
   }
 
   const secretManagerClient = getSecretManagerClient();

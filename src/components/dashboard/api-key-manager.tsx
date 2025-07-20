@@ -7,17 +7,19 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  CardFooter
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { KeyRound, Save, Loader2 } from "lucide-react";
+import { KeyRound, Save, Loader2, Plus } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { updateApiKey } from "@/ai/flows/update-api-key";
+import { Separator } from "@/components/ui/separator";
 
 type ServiceKey = "youtube_api_key" | "instagram_access_token" | "instagram_business_account_id" | "GEMINI_API_KEY";
 
-const apiKeys: { name: string; key: ServiceKey }[] = [
+const predefinedApiKeys: { name: string; key: ServiceKey }[] = [
   { name: "Gemini API Key", key: "GEMINI_API_KEY" },
   { name: "YouTube API Key", key: "youtube_api_key" },
   { name: "Instagram Access Token", key: "instagram_access_token" },
@@ -25,17 +27,17 @@ const apiKeys: { name: string; key: ServiceKey }[] = [
 ];
 
 export default function ApiKeyManager({ className }: { className?: string }) {
-  const [keyValues, setKeyValues] = useState<Record<ServiceKey, string>>(
-    {} as Record<ServiceKey, string>
-  );
-  const [loadingKey, setLoadingKey] = useState<ServiceKey | null>(null);
+  const [keyValues, setKeyValues] = useState<Record<string, string>>({});
+  const [loadingKey, setLoadingKey] = useState<string | null>(null);
+  const [newKeyName, setNewKeyName] = useState("");
+  const [newKeyValue, setNewKeyValue] = useState("");
   const { toast } = useToast();
 
-  const handleInputChange = (key: ServiceKey, value: string) => {
+  const handleInputChange = (key: string, value: string) => {
     setKeyValues((prev) => ({ ...prev, [key]: value }));
   };
 
-  const handleSaveKey = async (key: ServiceKey) => {
+  const handleSaveKey = async (key: string, name: string) => {
     const value = keyValues[key];
     if (!value) {
       toast({
@@ -70,6 +72,44 @@ export default function ApiKeyManager({ className }: { className?: string }) {
     }
   };
 
+  const handleAddNewKey = async () => {
+    if (!newKeyName.trim() || !newKeyValue.trim()) {
+      toast({
+        title: "Error",
+        description: "Both secret name and value are required.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLoadingKey('new_key'); // Set a generic loading state for the new key form
+    try {
+      const result = await updateApiKey({ service: newKeyName.trim(), value: newKeyValue.trim() });
+      if (result.success) {
+        toast({
+          title: "Success",
+          description: `New secret '${newKeyName.trim()}' has been saved.`,
+        });
+        setNewKeyName(""); // Clear inputs on success
+        setNewKeyValue("");
+      } else {
+         throw new Error(result.message || 'An unknown error occurred.');
+      }
+    } catch (error: any) {
+      console.error("Failed to save new API key:", error);
+      toast({
+        title: "Failed to save new key",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingKey(null);
+    }
+  };
+
+  const isLoadingNew = loadingKey === 'new_key';
+
+
   return (
     <Card className={className}>
       <CardHeader>
@@ -78,11 +118,11 @@ export default function ApiKeyManager({ className }: { className?: string }) {
           API Key Manager
         </CardTitle>
         <CardDescription>
-          Manage your third-party API keys securely in Google Secret Manager.
+          Manage predefined application keys or add new ones to Google Secret Manager.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        {apiKeys.map(({ name, key }) => (
+        {predefinedApiKeys.map(({ name, key }) => (
           <div key={key} className="space-y-2">
             <Label htmlFor={key}>{name}</Label>
             <div className="flex items-center gap-2">
@@ -94,7 +134,7 @@ export default function ApiKeyManager({ className }: { className?: string }) {
                 onChange={(e) => handleInputChange(key, e.target.value)}
                 disabled={!!loadingKey}
               />
-              <Button onClick={() => handleSaveKey(key)} disabled={loadingKey === key || !keyValues[key]} size="icon">
+              <Button onClick={() => handleSaveKey(key, name)} disabled={loadingKey === key || !keyValues[key]} size="icon">
                 {loadingKey === key ? (
                   <Loader2 className="animate-spin" />
                 ) : (
@@ -106,6 +146,41 @@ export default function ApiKeyManager({ className }: { className?: string }) {
           </div>
         ))}
       </CardContent>
+      <CardFooter className="flex-col items-start gap-4 pt-6">
+          <Separator />
+          <div className="w-full space-y-2">
+             <h3 className="text-lg font-medium">Add New Secret</h3>
+             <div className="space-y-2">
+                <Label htmlFor="newKeyName">Secret Name</Label>
+                 <Input
+                    id="newKeyName"
+                    placeholder="e.g., MY_CUSTOM_API_KEY"
+                    value={newKeyName}
+                    onChange={(e) => setNewKeyName(e.target.value)}
+                    disabled={isLoadingNew}
+                 />
+             </div>
+             <div className="space-y-2">
+                <Label htmlFor="newKeyValue">Secret Value</Label>
+                 <Input
+                    id="newKeyValue"
+                    type="password"
+                    placeholder="Enter the secret value"
+                    value={newKeyValue}
+                    onChange={(e) => setNewKeyValue(e.target.value)}
+                    disabled={isLoadingNew}
+                 />
+             </div>
+              <Button onClick={handleAddNewKey} disabled={isLoadingNew || !newKeyName || !newKeyValue}>
+                {isLoadingNew ? (
+                  <Loader2 className="animate-spin" />
+                ) : (
+                  <Plus />
+                )}
+                Add New Secret
+              </Button>
+          </div>
+      </CardFooter>
     </Card>
   );
 }
