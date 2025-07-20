@@ -97,16 +97,14 @@ async function generateUrl(input: GenerateUploadUrlInput): Promise<GenerateUploa
     const [url] = await file.getSignedUrl(options);
     console.log(`Generated signed URL for ${input.filename}`);
     
-    // Make the file public so the AI can read it.
-    await file.makePublic();
-    console.log(`Made gs://${bucketName}/${input.filename} public.`);
-    
+    // The public URL can be constructed without making the file public yet.
+    // The AI will access it once it's available. We need to grant permissions separately.
     return {
       signedUrl: url,
       publicUrl: `https://storage.googleapis.com/${bucketName}/${input.filename}`,
     };
   } catch (error: any) {
-    console.error('Failed to generate signed URL or make file public:', error);
+    console.error('Failed to generate signed URL:', error);
     throw new Error(`Could not complete URL generation process. Details: ${error.message}`);
   }
 }
