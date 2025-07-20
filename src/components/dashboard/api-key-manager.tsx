@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { KeyRound, Save, Loader2, Plus, Eye, EyeOff } from "lucide-react";
+import { KeyRound, Save, Loader2, Plus, Eye, EyeOff, Edit, X } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { updateApiKey } from "@/ai/flows/update-api-key";
 import { areApiKeysSet } from "@/ai/flows/are-api-keys-set";
@@ -33,6 +33,7 @@ export default function ApiKeyManager({ className }: { className?: string }) {
   const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({});
   const [setKeys, setSetKeys] = useState<string[]>([]);
   const [checkingKeys, setCheckingKeys] = useState(true);
+  const [editingKey, setEditingKey] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -65,6 +66,15 @@ export default function ApiKeyManager({ className }: { className?: string }) {
     setVisibleKeys((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
+  const handleEdit = (key: string) => {
+    setEditingKey(key);
+    setKeyValues((prev) => ({ ...prev, [key]: '' })); // Clear value on edit
+  };
+
+  const handleCancelEdit = () => {
+    setEditingKey(null);
+  };
+
   const handleSaveKey = async (key: string, name: string) => {
     const value = keyValues[key];
     if (!value) {
@@ -88,6 +98,7 @@ export default function ApiKeyManager({ className }: { className?: string }) {
         if (!setKeys.includes(key)) {
             setSetKeys([...setKeys, key]); // Mark key as set
         }
+        setEditingKey(null); // Exit edit mode
       } else {
          throw new Error(result.message || 'An unknown error occurred.');
       }
@@ -158,33 +169,56 @@ export default function ApiKeyManager({ className }: { className?: string }) {
             <span>Checking key status...</span>
           </div>
         ) : (
-          predefinedApiKeys.map(({ name, key }) => (
-            <div key={key} className="space-y-2">
-              <Label htmlFor={key}>{name}</Label>
-              <div className="flex items-center gap-2">
-                <Input
-                  id={key}
-                  type={visibleKeys[key] ? "text" : "password"}
-                  placeholder={setKeys.includes(key) ? "••••••••••••" : "Not set"}
-                  value={keyValues[key] || ""}
-                  onChange={(e) => handleInputChange(key, e.target.value)}
-                  disabled={!!loadingKey}
-                />
-                <Button variant="ghost" size="icon" onClick={() => toggleVisibility(key)} disabled={!!loadingKey}>
-                  {visibleKeys[key] ? <EyeOff /> : <Eye />}
-                  <span className="sr-only">{visibleKeys[key] ? 'Hide' : 'Show'} key</span>
-                </Button>
-                <Button onClick={() => handleSaveKey(key, name)} disabled={loadingKey === key || !keyValues[key]} size="icon">
-                  {loadingKey === key ? (
-                    <Loader2 className="animate-spin" />
-                  ) : (
-                    <Save />
-                  )}
-                  <span className="sr-only">Save {name}</span>
-                </Button>
-              </div>
-            </div>
-          ))
+          <div className="space-y-4">
+             <h3 className="text-lg font-medium">Predefined Secrets</h3>
+            {predefinedApiKeys.map(({ name, key }) => {
+              const isSet = setKeys.includes(key);
+              const isEditing = editingKey === key;
+              const isLoading = loadingKey === key;
+              const isReadOnly = !isEditing && isSet;
+
+              return (
+                <div key={key} className="space-y-2">
+                  <Label htmlFor={key}>{name}</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id={key}
+                      type={visibleKeys[key] ? "text" : "password"}
+                      placeholder={isSet ? "" : "Not set"}
+                      value={isReadOnly ? "••••••••••••••••" : (keyValues[key] || "")}
+                      onChange={(e) => handleInputChange(key, e.target.value)}
+                      readOnly={isReadOnly}
+                      className={isReadOnly ? "cursor-default focus-visible:ring-0" : ""}
+                      disabled={isLoading}
+                    />
+                    <Button variant="ghost" size="icon" onClick={() => toggleVisibility(key)} disabled={isLoading}>
+                      {visibleKeys[key] ? <EyeOff /> : <Eye />}
+                      <span className="sr-only">{visibleKeys[key] ? 'Hide' : 'Show'} key</span>
+                    </Button>
+                    
+                    {isEditing ? (
+                      <>
+                        <Button onClick={() => handleSaveKey(key, name)} disabled={isLoading || !keyValues[key]} size="icon">
+                          {isLoading ? <Loader2 className="animate-spin" /> : <Save />}
+                          <span className="sr-only">Save {name}</span>
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={handleCancelEdit} disabled={isLoading}>
+                           <X />
+                           <span className="sr-only">Cancel edit</span>
+                        </Button>
+                      </>
+                    ) : (
+                      <Button variant="outline" size="icon" onClick={() => handleEdit(key)} disabled={isLoading}>
+                        <Edit />
+                        <span className="sr-only">Edit {name}</span>
+                      </Button>
+                    )}
+
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         )}
       </CardContent>
       <CardFooter className="flex-col items-start gap-4 pt-6">
