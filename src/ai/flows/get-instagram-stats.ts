@@ -1,9 +1,9 @@
 'use server';
 
 /**
- * @fileOverview A flow for fetching Instagram profile statistics.
+ * @fileOverview A flow for fetching Instagram profile statistics using mock data.
  *
- * - getInstagramStats - A function that fetches statistics for an Instagram profile.
+ * - getInstagramStats - A function that returns mock statistics for an Instagram profile.
  * - GetInstagramStatsInput - The input type for the getInstagramStats function.
  * - GetInstagramStatsOutput - The return type for the getInstagramStats function.
  */
@@ -13,7 +13,6 @@ import { z } from 'genkit';
 
 const GetInstagramStatsInputSchema = z.object({
   // No input needed as we are returning mock data.
-  accessToken: z.string().optional().describe('The Instagram Graph API access token (no longer used).'),
 });
 export type GetInstagramStatsInput = z.infer<typeof GetInstagramStatsInputSchema>;
 
@@ -25,8 +24,7 @@ const GetInstagramStatsOutputSchema = z.object({
 });
 export type GetInstagramStatsOutput = z.infer<typeof GetInstagramStatsOutputSchema>;
 
-// Due to Instagram Basic Display API limitations (fields like username and media_count are deprecated),
-// this function returns mock data.
+// This function returns mock data.
 async function fetchInstagramData(input: GetInstagramStatsInput): Promise<GetInstagramStatsOutput> {
   return {
     username: 'ilovesanrio666',
@@ -42,5 +40,7 @@ export const getInstagramStats = ai.defineFlow(
     inputSchema: GetInstagramStatsInputSchema,
     outputSchema: GetInstagramStatsOutputSchema,
   },
-  fetchInstagramData
+  async (input) => {
+    return fetchInstagramData(input);
+  }
 );

@@ -15,7 +15,7 @@ import Image from "next/image";
 import { YoutubeIcon } from "../icons/youtube-icon";
 import { InstagramIcon } from "../icons/instagram-icon";
 import { getYoutubeStats, type GetYoutubeStatsOutput } from "@/ai/flows/get-youtube-stats";
-import { getInstagramStats, type GetInstagramStatsOutput } from "@/ai/flows/get-instagram-stats";
+import { getInstagramBusinessStats, type GetInstagramBusinessStatsOutput } from "@/ai/flows/get-instagram-business-stats";
 
 type SocialAccount = {
   platform: "YouTube" | "Instagram";
@@ -30,6 +30,18 @@ type ApiKey = {
   service: string;
   key: string;
 };
+
+// Function to format large numbers
+const formatNumber = (num: number): string => {
+    if (num >= 1000000) {
+        return (num / 1000000).toFixed(1) + 'M';
+    }
+    if (num >= 1000) {
+        return (num / 1000).toFixed(1) + 'K';
+    }
+    return num.toString();
+};
+
 
 const YouTubeStats: React.FC<{ handle: string }> = ({ handle }) => {
   const [stats, setStats] = useState<GetYoutubeStatsOutput | null>(null);
@@ -132,7 +144,7 @@ const YouTubeStats: React.FC<{ handle: string }> = ({ handle }) => {
 }
 
 const InstagramStats: React.FC<{ handle: string }> = ({ handle }) => {
-    const [stats, setStats] = useState<GetInstagramStatsOutput | null>(null);
+    const [stats, setStats] = useState<GetInstagramBusinessStatsOutput | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [isMounted, setIsMounted] = useState(false);
@@ -149,8 +161,27 @@ const InstagramStats: React.FC<{ handle: string }> = ({ handle }) => {
             setError(null);
             setStats(null);
             try {
-                // We no longer need a real API call, just get mock data.
-                const result = await getInstagramStats({});
+                let accessToken: string | undefined;
+                let businessAccountId: string | undefined;
+                const storedKeys = localStorage.getItem("apiKeys");
+                if (storedKeys) {
+                    const keys: ApiKey[] = JSON.parse(storedKeys);
+                    accessToken = keys.find(k => k.service === 'instagram_access_token')?.key;
+                    businessAccountId = keys.find(k => k.service === 'instagram_business_account_id')?.key;
+                }
+
+                if (!accessToken) {
+                    throw new Error("Instagram Access Token not found. Please add it in the API Key Manager with the service name 'instagram_access_token'.");
+                }
+                if (!businessAccountId) {
+                    throw new Error("Instagram Business Account ID not found. Please add it in the API Key Manager with the service name 'instagram_business_account_id'.");
+                }
+                
+                const result = await getInstagramBusinessStats({
+                    usernameToQuery: handle.startsWith('@') ? handle.substring(1) : handle,
+                    instagramBusinessAccountId: businessAccountId,
+                    accessToken: accessToken,
+                });
                 setStats(result);
             } catch (e: any) {
                 setError(e.message || "Failed to fetch Instagram stats.");
@@ -199,11 +230,11 @@ const InstagramStats: React.FC<{ handle: string }> = ({ handle }) => {
                 <p className="text-muted-foreground">@{stats.username}</p>
                 <div className="grid grid-cols-2 justify-around w-full my-4 text-center">
                     <div key="Followers">
-                        <p className="text-2xl font-bold">{stats.followersCount}</p>
+                        <p className="text-2xl font-bold">{formatNumber(stats.followersCount)}</p>
                         <p className="text-sm text-muted-foreground">Followers</p>
                     </div>
                     <div key="Posts">
-                        <p className="text-2xl font-bold">{stats.mediaCount}</p>
+                        <p className="text-2xl font-bold">{formatNumber(stats.mediaCount)}</p>
                         <p className="text-sm text-muted-foreground">Posts</p>
                     </div>
                 </div>
@@ -225,7 +256,7 @@ const socialAccounts: SocialAccount[] = [
   },
   {
     platform: "Instagram",
-    handle: "@ilovesanrio666",
+    handle: "ilovesanrio666",
     href: "https://www.instagram.com/ilovesanrio666",
     icon: <InstagramIcon className="h-6 w-6" />,
     statsComponent: InstagramStats,
