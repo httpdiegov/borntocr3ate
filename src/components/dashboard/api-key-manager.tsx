@@ -15,21 +15,23 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion"
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { KeyRound, Save, Loader2, Plus, Eye, EyeOff } from "lucide-react";
+import { KeyRound, Save, Loader2, Plus, Eye, EyeOff, ChevronDown } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { updateApiKey } from "@/ai/flows/update-api-key";
 import { getApiKeys } from "@/ai/flows/get-api-keys";
 import { Separator } from "@/components/ui/separator";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 
 
 const predefinedApiKeys: { name: string; key: string }[] = [
@@ -39,12 +41,15 @@ const predefinedApiKeys: { name: string; key: string }[] = [
   { name: "Instagram Business Account ID", key: "instagram_business_account_id" },
 ];
 
+const availableTags = ["IA", "Redes Sociales", "Otro"];
+
+
 export default function ApiKeyManager({ className }: { className?: string }) {
   const [keyValues, setKeyValues] = useState<Record<string, string>>({});
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
   const [newKeyName, setNewKeyName] = useState("");
   const [newKeyValue, setNewKeyValue] = useState("");
-  const [newKeyTag, setNewKeyTag] = useState("");
+  const [newKeyTags, setNewKeyTags] = useState<string[]>([]);
   const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({});
   const [checkingKeys, setCheckingKeys] = useState(true);
   const { toast } = useToast();
@@ -98,7 +103,6 @@ export default function ApiKeyManager({ className }: { className?: string }) {
           title: "Success",
           description: result.message || `${name} has been updated.`,
         });
-        // Refetch keys to update the state after saving
         const keyNames = predefinedApiKeys.map(k => k.key);
         const fetchResult = await getApiKeys({ services: keyNames });
         setKeyValues(fetchResult.keys);
@@ -132,7 +136,7 @@ export default function ApiKeyManager({ className }: { className?: string }) {
       const result = await updateApiKey({ 
         service: newKeyName.trim(), 
         value: newKeyValue.trim(),
-        tag: newKeyTag, 
+        tags: newKeyTags, 
       });
       if (result.success) {
         toast({
@@ -141,7 +145,7 @@ export default function ApiKeyManager({ className }: { className?: string }) {
         });
         setNewKeyName(""); 
         setNewKeyValue("");
-        setNewKeyTag("");
+        setNewKeyTags([]);
       } else {
          throw new Error(result.message || 'An unknown error occurred.');
       }
@@ -155,6 +159,12 @@ export default function ApiKeyManager({ className }: { className?: string }) {
     } finally {
       setLoadingKey(null);
     }
+  };
+  
+  const handleTagToggle = (tag: string) => {
+    setNewKeyTags(prev => 
+      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+    );
   };
 
   const isLoadingNew = loadingKey === 'new_key';
@@ -192,12 +202,12 @@ export default function ApiKeyManager({ className }: { className?: string }) {
                       id={key}
                       type={isVisible ? "text" : "password"}
                       placeholder="Key not set..."
-                      value={isVisible ? keyValues[key] || "" : (hasValue ? "••••••••••••" : "")}
+                      value={keyValues[key] || ""}
                       onChange={(e) => handleInputChange(key, e.target.value)}
                       disabled={isLoading}
                     />
                     
-                    <Button variant="ghost" size="icon" onClick={() => toggleVisibility(key)} disabled={isLoading || !hasValue}>
+                    <Button variant="ghost" size="icon" onClick={() => toggleVisibility(key)} disabled={isLoading}>
                       {isVisible ? <EyeOff /> : <Eye />}
                       <span className="sr-only">
                         {isVisible ? 'Hide' : 'Show'} key
@@ -250,17 +260,30 @@ export default function ApiKeyManager({ className }: { className?: string }) {
                        </div>
                    </div>
                    <div className="space-y-2">
-                     <Label htmlFor="newKeyTag">Etiqueta</Label>
-                     <Select value={newKeyTag} onValueChange={setNewKeyTag} disabled={isLoadingNew}>
-                       <SelectTrigger id="newKeyTag">
-                         <SelectValue placeholder="Seleccionar etiqueta..." />
-                       </SelectTrigger>
-                       <SelectContent>
-                          <SelectItem value="IA">IA</SelectItem>
-                          <SelectItem value="redes sociales">Redes Sociales</SelectItem>
-                          <SelectItem value="Otro">Otro</SelectItem>
-                       </SelectContent>
-                     </Select>
+                     <Label>Etiquetas</Label>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="outline" className="w-full justify-between" disabled={isLoadingNew}>
+                            <span>
+                              {newKeyTags.length > 0 ? newKeyTags.join(', ') : "Seleccionar etiquetas..."}
+                            </span>
+                            <ChevronDown className="h-4 w-4 opacity-50" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="w-[var(--radix-dropdown-menu-trigger-width)]">
+                          <DropdownMenuLabel>Asignar etiquetas</DropdownMenuLabel>
+                          <DropdownMenuSeparator />
+                          {availableTags.map((tag) => (
+                             <DropdownMenuCheckboxItem
+                              key={tag}
+                              checked={newKeyTags.includes(tag)}
+                              onCheckedChange={() => handleTagToggle(tag)}
+                             >
+                               {tag}
+                             </DropdownMenuCheckboxItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                    </div>
                     <Button onClick={handleAddNewKey} disabled={isLoadingNew || !newKeyName || !newKeyValue}>
                       {isLoadingNew ? (

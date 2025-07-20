@@ -2,7 +2,7 @@
 
 /**
  * @fileOverview A flow for updating API keys in a secure store.
- * This flow now writes the key to Google Secret Manager and can add a tag label.
+ * This flow now writes the key to Google Secret Manager and can add multiple tags as labels.
  */
 
 import { ai } from '@/ai/genkit';
@@ -27,11 +27,10 @@ function getSecretManagerClient() {
   }
 }
 
-
 const UpdateApiKeyInputSchema = z.object({
   service: z.string().describe('The name of the secret to create or update (e.g., youtube_api_key).'),
   value: z.string().describe('The new API key value.'),
-  tag: z.string().optional().describe('An optional tag to categorize the secret (e.g., IA, redes sociales).'),
+  tags: z.array(z.string()).optional().describe('Optional tags to categorize the secret (e.g., ["IA", "redes sociales"]).'),
 });
 export type UpdateApiKeyInput = z.infer<typeof UpdateApiKeyInputSchema>;
 
@@ -56,25 +55,31 @@ async function updateApiKeyInSecretManager(input: UpdateApiKeyInput): Promise<Up
   const secretName = input.service;
   const parent = `projects/${projectId}`;
   const secretPath = `${parent}/secrets/${secretName}`;
-  const labels = input.tag ? { tag: input.tag } : {};
+  
+  // Create labels from tags
+  const labels: Record<string, string> = {};
+  if (input.tags && input.tags.length > 0) {
+    input.tags.forEach(tag => {
+      const labelKey = `tag-${tag.toLowerCase().replace(/\s+/g, '-')}`;
+      labels[labelKey] = "true";
+    });
+  }
+
 
   try {
     // Check if secret exists, if not, create it
     try {
       await secretManagerClient.getSecret({ name: secretPath });
-       // If secret exists and there's a tag, update its labels.
-      if (input.tag) {
-        console.log(`Secret ${secretName} exists. Updating labels...`);
-        await secretManagerClient.updateSecret({
-          secret: {
-            name: secretPath,
-            labels: labels,
-          },
-          updateMask: {
-            paths: ['labels'],
-          },
-        });
-      }
+      console.log(`Secret ${secretName} exists. Updating labels...`);
+      await secretManagerClient.updateSecret({
+        secret: {
+          name: secretPath,
+          labels: labels,
+        },
+        updateMask: {
+          paths: ['labels'],
+        },
+      });
     } catch (e: any) {
       if (e.code === 5) { // NOT_FOUND
         console.log(`Secret ${secretName} not found. Creating it...`);
