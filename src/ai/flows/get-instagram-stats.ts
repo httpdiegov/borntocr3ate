@@ -26,9 +26,6 @@ const GetInstagramStatsOutputSchema = z.object({
 });
 export type GetInstagramStatsOutput = z.infer<typeof GetInstagramStatsOutputSchema>;
 
-// A real implementation would fetch from the Instagram Graph API.
-// Note: The public Instagram API is very limited and getting follower counts requires advanced permissions (Business accounts + Facebook app review).
-// For this reason, we will mock the response but show how the flow would be structured.
 async function fetchInstagramData(input: GetInstagramStatsInput): Promise<GetInstagramStatsOutput> {
   const url = `https://graph.instagram.com/me?fields=username,media_count&access_token=${input.accessToken}`;
 
@@ -37,7 +34,7 @@ async function fetchInstagramData(input: GetInstagramStatsInput): Promise<GetIns
     if (!response.ok) {
       const errorData = await response.json();
       console.error('Instagram API Error:', errorData);
-      throw new Error(`Instagram API request failed: ${errorData.error.message}`);
+      throw new Error(`Error from Instagram API: ${errorData.error.message} (Code: ${errorData.error.code})`);
     }
     const data = await response.json();
 
@@ -49,14 +46,9 @@ async function fetchInstagramData(input: GetInstagramStatsInput): Promise<GetIns
       profilePicUrl: 'https://placehold.co/80x80.png',
     };
   } catch (error: any) {
-    console.error("Failed to fetch Instagram data:", error);
-    // Return mock data on failure to not break the UI
-    return {
-        username: "your_instagram",
-        mediaCount: 587,
-        followersCount: '1.2M',
-        profilePicUrl: 'https://placehold.co/80x80.png'
-    }
+    console.error("Failed to fetch Instagram data:", error.message);
+    // Re-throw the error to be caught by the client component
+    throw new Error(error.message || 'An unknown error occurred while fetching Instagram data.');
   }
 }
 

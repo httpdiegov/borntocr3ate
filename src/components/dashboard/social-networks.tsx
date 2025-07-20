@@ -87,7 +87,7 @@ const YouTubeStats: React.FC<{ handle: string }> = ({ handle }) => {
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-destructive text-center">
+      <div className="flex flex-col items-center justify-center h-full text-destructive text-center p-4">
         <AlertTriangle className="h-8 w-8" />
         <p className="mt-2 font-semibold">Error</p>
         <p className="text-sm">{error}</p>
@@ -183,7 +183,7 @@ const InstagramStats: React.FC<{ handle: string }> = ({ handle }) => {
 
     if (error) {
         return (
-            <div className="flex flex-col items-center justify-center h-full text-destructive text-center">
+            <div className="flex flex-col items-center justify-center h-full text-destructive text-center p-4">
                 <AlertTriangle className="h-8 w-8" />
                 <p className="mt-2 font-semibold">Error</p>
                 <p className="text-sm">{error}</p>
