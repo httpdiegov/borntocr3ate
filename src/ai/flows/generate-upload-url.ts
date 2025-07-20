@@ -35,52 +35,67 @@ export type GenerateUploadUrlInput = z.infer<typeof GenerateUploadUrlInputSchema
 
 const GenerateUploadUrlOutputSchema = z.object({
   signedUrl: z.string().url().describe('The signed URL for the PUT request.'),
-  publicUrl: z.string().url().describe('The public URL of the uploaded file.'),
+  gcsUri: z.string().describe('The GCS URI of the file for the AI to process.'),
 });
 export type GenerateUploadUrlOutput = z.infer<typeof GenerateUploadUrlOutputSchema>;
 
 
 async function generateUrl(input: GenerateUploadUrlInput): Promise<GenerateUploadUrlOutput> {
+  const credentialsPath = path.resolve(process.cwd(), 'google-credentials.json');
+  let serviceAccountEmail: string | undefined;
+
+  if (fs.existsSync(credentialsPath)) {
+    const creds = JSON.parse(fs.readFileSync(credentialsPath, 'utf-8'));
+    serviceAccountEmail = creds.client_email;
+  }
+
   const projectId = process.env.GCLOUD_PROJECT;
   if (!projectId) {
     throw new Error('GCLOUD_PROJECT environment variable not set.');
   }
   
-  // You must create a bucket in your Google Cloud project.
-  // We recommend giving it a unique name, like `your-project-id-media`.
   const bucketName = `${projectId}-media`; 
   const storage = getStorageClient();
   const bucket = storage.bucket(bucketName);
 
-  // Check if the bucket exists. If not, create it.
   const [exists] = await bucket.exists();
   if (!exists) {
     console.log(`Bucket '${bucketName}' does not exist. Creating it...`);
     try {
-        // Create the bucket.
         await storage.createBucket(bucketName);
         console.log(`Bucket '${bucketName}' created.`);
+        
+        // Grant the service account permissions to view objects in the bucket.
+        if (serviceAccountEmail) {
+            console.log(`Granting storage.objectViewer role to ${serviceAccountEmail} on bucket ${bucketName}`);
+            const [policy] = await bucket.getIamPolicy();
+            policy.bindings.push({
+                role: 'roles/storage.objectViewer',
+                members: [`serviceAccount:${serviceAccountEmail}`],
+            });
+            await bucket.setIamPolicy(policy);
+            console.log('IAM policy updated successfully.');
+        } else {
+            console.warn('Could not determine service account email. IAM policy not set. This might cause issues if not set manually.');
+        }
+
     } catch (creationError: any) {
-        console.error(`Failed to create bucket '${bucketName}':`, creationError);
-        throw new Error(`Failed to create storage bucket: ${creationError.message}`);
+        console.error(`Failed to create bucket or set IAM policy on '${bucketName}':`, creationError);
+        throw new Error(`Failed to create or configure storage bucket: ${creationError.message}`);
     }
   }
 
-  // Ensure CORS is set correctly on the bucket to allow uploads from the browser.
-  // This is set on every run to ensure it's always correct.
   try {
     await bucket.setCorsConfiguration([
         {
-            maxAgeSeconds: 3600, // Cache preflight responses for 1 hour
-            method: ['PUT'], // Allow PUT requests for the upload
-            origin: ['*'], // Allow all origins (safe due to signed URL)
+            maxAgeSeconds: 3600,
+            method: ['PUT'],
+            origin: ['*'],
             responseHeader: ['Content-Type'],
         },
     ]);
-    console.log(`CORS configuration set for bucket '${bucketName}'.`);
   } catch(corsError: any) {
     console.error(`Failed to set CORS configuration on bucket '${bucketName}':`, corsError);
-    // We can still try to proceed, but it might fail on the client.
   }
 
 
@@ -97,11 +112,9 @@ async function generateUrl(input: GenerateUploadUrlInput): Promise<GenerateUploa
     const [url] = await file.getSignedUrl(options);
     console.log(`Generated signed URL for ${input.filename}`);
     
-    // The public URL can be constructed without making the file public yet.
-    // The AI will access it once it's available. We need to grant permissions separately.
     return {
       signedUrl: url,
-      publicUrl: `https://storage.googleapis.com/${bucketName}/${input.filename}`,
+      gcsUri: `gs://${bucketName}/${input.filename}`,
     };
   } catch (error: any) {
     console.error('Failed to generate signed URL:', error);

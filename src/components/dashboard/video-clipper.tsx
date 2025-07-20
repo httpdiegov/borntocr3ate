@@ -20,8 +20,8 @@ import { Badge } from "../ui/badge";
 import { Textarea } from "../ui/textarea";
 
 const sanitizeFilename = (filename: string): string => {
-  // Replace spaces and special characters with underscores
-  return filename.replace(/[\s\W]+/g, '_');
+  // Replace spaces and special characters with underscores, remove others except dot
+  return filename.replace(/[^a-zA-Z0-9._-]/g, '_');
 };
 
 
@@ -62,16 +62,16 @@ export default function VideoClipper({ className }: { className?: string }) {
     // 1. Get signed URL for upload
     setIsUploading(true);
     toast({ title: "Preparing secure upload...", description: "This is the recommended way for large files." });
-    let publicUrl: string;
+    let gcsUri: string;
     
     const safeFilename = sanitizeFilename(videoFile.name);
 
     try {
-      const { signedUrl, publicUrl: resultPublicUrl } = await generateUploadUrl({
+      const { signedUrl, gcsUri: resultGcsUri } = await generateUploadUrl({
         filename: safeFilename,
         contentType: videoFile.type,
       });
-      publicUrl = resultPublicUrl;
+      gcsUri = resultGcsUri;
 
       // 2. Upload file directly to GCS
       toast({ title: "Uploading video...", description: "Your file is being uploaded directly to secure storage." });
@@ -102,13 +102,13 @@ export default function VideoClipper({ className }: { className?: string }) {
       setIsUploading(false);
     }
     
-    // 3. Transcribe from Public URL
+    // 3. Transcribe from GCS URI
     setIsTranscribing(true);
     toast({ title: "Starting transcription...", description: "The AI is processing the video. This may take a few minutes." });
 
     try {
         const result = await transcribeVideo({ 
-          publicUrl,
+          gcsUri,
           contentType: videoFile.type,
         });
         setTranscription(result.transcription);

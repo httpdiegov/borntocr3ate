@@ -3,14 +3,14 @@
 
 /**
  * @fileOverview A flow for transcribing video content using Genkit.
- * This flow now accepts a public Google Cloud Storage URL.
+ * This flow now accepts a Google Cloud Storage URI.
  */
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 
-// Define the schema for the input: a public GCS URL
+// Define the schema for the input: a GCS URI
 const TranscribeVideoInputSchema = z.object({
-  publicUrl: z.string().url().describe('The public Google Cloud Storage URL of the video file (e.g., "https://storage.googleapis.com/bucket-name/video.mp4").'),
+  gcsUri: z.string().startsWith('gs://').describe('The Google Cloud Storage URI of the video file (e.g., "gs://bucket-name/video.mp4").'),
   contentType: z.string().describe('The MIME type of the video file (e.g., "video/mp4").'),
 });
 export type TranscribeVideoInput = z.infer<typeof TranscribeVideoInputSchema>;
@@ -24,17 +24,17 @@ export type TranscribeVideoOutput = z.infer<
 >;
 
 /**
- * Transcribes a video from a GCS URL using the Gemini API.
- * @param input The video's public URL to transcribe.
+ * Transcribes a video from a GCS URI using the Gemini API.
+ * @param input The video's GCS URI to transcribe.
  * @returns The transcription text.
  */
 export async function transcribeVideo(input: TranscribeVideoInput): Promise<TranscribeVideoOutput> {
-  console.log(`Starting video transcription from Public URL: ${input.publicUrl}`);
+  console.log(`Starting video transcription from GCS URI: ${input.gcsUri}`);
   
   const { output } = await ai.generate({
       model: 'googleai/gemini-1.5-flash',
       prompt: [
-        { media: { url: input.publicUrl, contentType: input.contentType } },
+        { media: { url: input.gcsUri, contentType: input.contentType } },
         { text: 'Transcribe the audio from the following video accurately. Provide only the text of the transcription.' },
       ],
       output: {
