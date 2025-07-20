@@ -5,22 +5,27 @@ import { useFormStatus } from "react-dom";
 import { handleGenerateNewsBrief } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Bot } from "lucide-react";
+import { Bot, RefreshCw } from "lucide-react";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
 
 function SubmitButton() {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" disabled={pending}>
-      {pending ? "Generating..." : "Generate Brief"}
+    <Button type="submit" disabled={pending} className="w-full">
+      <RefreshCw className={`mr-2 h-4 w-4 ${pending ? 'animate-spin' : ''}`} />
+      {pending ? "Generando..." : "Generar Noticias"}
     </Button>
   );
 }
 
 export default function NewsBrief({ className }: { className?: string }) {
-  const initialState = { newsBrief: null, message: "" };
+  const initialState = { newsItems: null, message: "" };
   const [state, dispatch] = useActionState(handleGenerateNewsBrief, initialState);
   const { pending } = useFormStatus();
 
@@ -29,23 +34,14 @@ export default function NewsBrief({ className }: { className?: string }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Bot className="h-6 w-6" />
-          Relevant News
+          Noticias Relevantes
         </CardTitle>
         <CardDescription>
-          Get a personalized news brief based on your interests.
+          Las 5 noticias más importantes del día, generadas por IA.
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form action={dispatch} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="interests">Interests</Label>
-            <Input
-              id="interests"
-              name="interests"
-              placeholder="e.g., artificial intelligence, space exploration, biotech"
-              required
-            />
-          </div>
           <SubmitButton />
         </form>
         {state.message === "failed" && (
@@ -53,16 +49,27 @@ export default function NewsBrief({ className }: { className?: string }) {
         )}
         <div className="mt-6">
           {pending ? (
-            <div className="space-y-2">
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-3/4" />
+            <div className="space-y-4">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="space-y-2">
+                  <Skeleton className="h-6 w-3/4" />
+                  <Skeleton className="h-4 w-full" />
+                   <Skeleton className="h-4 w-5/6" />
+                </div>
+              ))}
             </div>
           ) : (
-            state.newsBrief && (
-              <div className="prose prose-invert text-sm text-muted-foreground bg-muted/50 rounded-lg p-4">
-                <p>{state.newsBrief}</p>
-              </div>
+            state.newsItems && (
+              <Accordion type="single" collapsible className="w-full">
+                {state.newsItems.map((item, index) => (
+                  <AccordionItem value={`item-${index}`} key={index}>
+                    <AccordionTrigger>{item.title}</AccordionTrigger>
+                    <AccordionContent className="text-muted-foreground">
+                      {item.summary}
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
             )
           )}
         </div>

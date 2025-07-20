@@ -1,7 +1,7 @@
 'use server';
 
 /**
- * @fileOverview An AI agent for generating personalized news briefs based on user interests.
+ * @fileOverview An AI agent for generating the top news stories of the day.
  *
  * - generateNewsBrief - A function that generates a news brief.
  * - GenerateNewsBriefInput - The input type for the generateNewsBrief function.
@@ -11,17 +11,19 @@
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
-const GenerateNewsBriefInputSchema = z.object({
-  interests: z
-    .string()
-    .describe('A comma-separated list of topics the user is interested in.'),
-});
+const GenerateNewsBriefInputSchema = z.object({});
 export type GenerateNewsBriefInput = z.infer<typeof GenerateNewsBriefInputSchema>;
 
+const NewsItemSchema = z.object({
+  title: z.string().describe('The title of the news story.'),
+  summary: z.string().describe('A brief summary of the news story.'),
+});
+
 const GenerateNewsBriefOutputSchema = z.object({
-  newsBrief: z
-    .string()
-    .describe('A concise news brief based on the user specified interests.'),
+  newsItems: z
+    .array(NewsItemSchema)
+    .length(5)
+    .describe('A list of the top 5 news stories of the day.'),
 });
 export type GenerateNewsBriefOutput = z.infer<typeof GenerateNewsBriefOutputSchema>;
 
@@ -33,11 +35,7 @@ const prompt = ai.definePrompt({
   name: 'generateNewsBriefPrompt',
   input: {schema: GenerateNewsBriefInputSchema},
   output: {schema: GenerateNewsBriefOutputSchema},
-  prompt: `You are a personalized news aggregator. You will generate a concise news brief based on the user's specified interests.
-
-  Interests: {{{interests}}}
-
-  News Brief:`,
+  prompt: `You are a world-class news editor. Your task is to provide a summary of the 5 most important news stories of the day.`,
 });
 
 const generateNewsBriefFlow = ai.defineFlow(
