@@ -55,6 +55,7 @@ export default function ApiKeyManager({ className }: { className?: string }) {
   const [keyValue, setKeyValue] = useState("");
   const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({});
   const { toast } = useToast();
+  const [isDialogOpen, setDialogOpen] = useState(false);
 
   const handleAddKey = () => {
     if (service && keyValue) {
@@ -65,14 +66,14 @@ export default function ApiKeyManager({ className }: { className?: string }) {
       setService("");
       setKeyValue("");
       toast({ title: "API Key added successfully." });
-      return true; // to close dialog
+      setDialogOpen(false);
+    } else {
+      toast({
+        title: "Error",
+        description: "Service name and key cannot be empty.",
+        variant: "destructive",
+      });
     }
-    toast({
-      title: "Error",
-      description: "Service name and key cannot be empty.",
-      variant: "destructive",
-    });
-    return false;
   };
 
   const handleDeleteKey = (id: string) => {
@@ -101,7 +102,7 @@ export default function ApiKeyManager({ className }: { className?: string }) {
             Store and manage your API keys securely.
           </CardDescription>
         </div>
-        <Dialog>
+        <Dialog open={isDialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button size="sm">
               <Plus className="h-4 w-4 mr-2" /> Add Key
@@ -139,9 +140,7 @@ export default function ApiKeyManager({ className }: { className?: string }) {
                 <DialogClose asChild>
                     <Button variant="outline">Cancel</Button>
                 </DialogClose>
-                <DialogClose asChild={handleAddKey()}>
-                    <Button onClick={handleAddKey}>Save Key</Button>
-                </DialogClose>
+                <Button onClick={handleAddKey}>Save Key</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
