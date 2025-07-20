@@ -2,7 +2,7 @@
 
 /**
  * @fileOverview A flow for updating API keys in a secure store.
- * This flow now writes the key to Google Secret Manager.
+ * This flow now writes the key to Google Secret Manager and can add a tag label.
  */
 
 import { ai } from '@/ai/genkit';
@@ -31,6 +31,7 @@ function getSecretManagerClient() {
 const UpdateApiKeyInputSchema = z.object({
   service: z.string().describe('The name of the secret to create or update (e.g., youtube_api_key).'),
   value: z.string().describe('The new API key value.'),
+  tag: z.string().optional().describe('An optional tag to categorize the secret (e.g., IA, redes sociales).'),
 });
 export type UpdateApiKeyInput = z.infer<typeof UpdateApiKeyInputSchema>;
 
@@ -55,11 +56,25 @@ async function updateApiKeyInSecretManager(input: UpdateApiKeyInput): Promise<Up
   const secretName = input.service;
   const parent = `projects/${projectId}`;
   const secretPath = `${parent}/secrets/${secretName}`;
+  const labels = input.tag ? { tag: input.tag } : {};
 
   try {
     // Check if secret exists, if not, create it
     try {
       await secretManagerClient.getSecret({ name: secretPath });
+       // If secret exists and there's a tag, update its labels.
+      if (input.tag) {
+        console.log(`Secret ${secretName} exists. Updating labels...`);
+        await secretManagerClient.updateSecret({
+          secret: {
+            name: secretPath,
+            labels: labels,
+          },
+          updateMask: {
+            paths: ['labels'],
+          },
+        });
+      }
     } catch (e: any) {
       if (e.code === 5) { // NOT_FOUND
         console.log(`Secret ${secretName} not found. Creating it...`);
@@ -70,6 +85,7 @@ async function updateApiKeyInSecretManager(input: UpdateApiKeyInput): Promise<Up
             replication: {
               automatic: {},
             },
+            labels: labels,
           },
         });
         console.log(`Secret ${secretName} created.`);

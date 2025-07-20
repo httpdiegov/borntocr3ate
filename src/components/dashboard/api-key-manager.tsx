@@ -23,6 +23,14 @@ import { Label } from "@/components/ui/label";
 import { updateApiKey } from "@/ai/flows/update-api-key";
 import { getApiKeys } from "@/ai/flows/get-api-keys";
 import { Separator } from "@/components/ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+
 
 const predefinedApiKeys: { name: string; key: string }[] = [
   { name: "Gemini API Key", key: "GEMINI_API_KEY" },
@@ -36,6 +44,7 @@ export default function ApiKeyManager({ className }: { className?: string }) {
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
   const [newKeyName, setNewKeyName] = useState("");
   const [newKeyValue, setNewKeyValue] = useState("");
+  const [newKeyTag, setNewKeyTag] = useState("");
   const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({});
   const [checkingKeys, setCheckingKeys] = useState(true);
   const { toast } = useToast();
@@ -89,7 +98,10 @@ export default function ApiKeyManager({ className }: { className?: string }) {
           title: "Success",
           description: result.message || `${name} has been updated.`,
         });
-        // We don't need to update savedKeys state anymore as we fetch on load
+        // Refetch keys to update the state after saving
+        const keyNames = predefinedApiKeys.map(k => k.key);
+        const fetchResult = await getApiKeys({ services: keyNames });
+        setKeyValues(fetchResult.keys);
       } else {
          throw new Error(result.message || 'An unknown error occurred.');
       }
@@ -117,14 +129,19 @@ export default function ApiKeyManager({ className }: { className?: string }) {
 
     setLoadingKey('new_key');
     try {
-      const result = await updateApiKey({ service: newKeyName.trim(), value: newKeyValue.trim() });
+      const result = await updateApiKey({ 
+        service: newKeyName.trim(), 
+        value: newKeyValue.trim(),
+        tag: newKeyTag, 
+      });
       if (result.success) {
         toast({
           title: "Success",
-          description: `New secret '${newKeyName.trim()}' has been saved. Refresh the page if you want to manage it from a predefined list.`,
+          description: `New secret '${newKeyName.trim()}' has been saved. Refresh the page to manage it if it's part of a predefined list.`,
         });
         setNewKeyName(""); 
         setNewKeyValue("");
+        setNewKeyTag("");
       } else {
          throw new Error(result.message || 'An unknown error occurred.');
       }
@@ -165,7 +182,7 @@ export default function ApiKeyManager({ className }: { className?: string }) {
             {predefinedApiKeys.map(({ name, key }) => {
               const isLoading = loadingKey === key;
               const isVisible = visibleKeys[key];
-              const value = keyValues[key] || "";
+              const hasValue = !!keyValues[key];
 
               return (
                 <div key={key} className="space-y-2">
@@ -174,20 +191,20 @@ export default function ApiKeyManager({ className }: { className?: string }) {
                     <Input
                       id={key}
                       type={isVisible ? "text" : "password"}
-                      placeholder={value ? "••••••••••••" : "Key not set..."}
-                      value={value}
+                      placeholder="Key not set..."
+                      value={isVisible ? keyValues[key] || "" : (hasValue ? "••••••••••••" : "")}
                       onChange={(e) => handleInputChange(key, e.target.value)}
                       disabled={isLoading}
                     />
                     
-                    <Button variant="ghost" size="icon" onClick={() => toggleVisibility(key)} disabled={isLoading || !value}>
+                    <Button variant="ghost" size="icon" onClick={() => toggleVisibility(key)} disabled={isLoading || !hasValue}>
                       {isVisible ? <EyeOff /> : <Eye />}
                       <span className="sr-only">
                         {isVisible ? 'Hide' : 'Show'} key
                       </span>
                     </Button>
                     
-                    <Button onClick={() => handleSaveKey(key, name)} disabled={isLoading || !value} size="icon">
+                    <Button onClick={() => handleSaveKey(key, name)} disabled={isLoading || !keyValues[key]} size="icon">
                         {isLoading ? <Loader2 className="animate-spin" /> : <Save />}
                         <span className="sr-only">Save {name}</span>
                     </Button>
@@ -231,6 +248,19 @@ export default function ApiKeyManager({ className }: { className?: string }) {
                             <span className="sr-only">Toggle new key visibility</span>
                           </Button>
                        </div>
+                   </div>
+                   <div className="space-y-2">
+                     <Label htmlFor="newKeyTag">Etiqueta</Label>
+                     <Select value={newKeyTag} onValueChange={setNewKeyTag} disabled={isLoadingNew}>
+                       <SelectTrigger id="newKeyTag">
+                         <SelectValue placeholder="Seleccionar etiqueta..." />
+                       </SelectTrigger>
+                       <SelectContent>
+                          <SelectItem value="IA">IA</SelectItem>
+                          <SelectItem value="redes sociales">Redes Sociales</SelectItem>
+                          <SelectItem value="Otro">Otro</SelectItem>
+                       </SelectContent>
+                     </Select>
                    </div>
                     <Button onClick={handleAddNewKey} disabled={isLoadingNew || !newKeyName || !newKeyValue}>
                       {isLoadingNew ? (
