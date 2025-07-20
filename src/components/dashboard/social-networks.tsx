@@ -22,14 +22,7 @@ type SocialAccount = {
   handle: string;
   href: string;
   icon: JSX.Element;
-  statsComponent: React.FC<{ handle: string; businessIdKey?: string }>;
-  businessIdKey?: string;
-};
-
-type ApiKey = {
-  id: string;
-  service: string;
-  key: string;
+  statsComponent: React.FC<{ handle: string; }>;
 };
 
 // Function to format large numbers
@@ -48,36 +41,15 @@ const YouTubeStats: React.FC<{ handle: string }> = ({ handle }) => {
   const [stats, setStats] = useState<GetYoutubeStatsOutput | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
-  useEffect(() => {
-    if (!isMounted) return;
-
     const fetchStats = async () => {
       setLoading(true);
       setError(null);
       setStats(null);
 
       try {
-        let apiKey: string | undefined;
-        const storedKeys = localStorage.getItem("apiKeys");
-        if (storedKeys) {
-          const keys: ApiKey[] = JSON.parse(storedKeys);
-          apiKey = keys.find(k => k.service === 'youtube_api_key')?.key;
-        }
-        
-        if (!apiKey) {
-          throw new Error("YouTube API key not found. Please add it in the API Key Manager with the service name 'youtube_api_key'.");
-        }
-        
-        const result = await getYoutubeStats({
-          channelHandle: handle,
-          apiKey: apiKey,
-        });
+        const result = await getYoutubeStats({ channelHandle: handle });
         setStats(result);
       } catch (e: any) {
         setError(e.message || "Failed to fetch YouTube stats.");
@@ -87,9 +59,9 @@ const YouTubeStats: React.FC<{ handle: string }> = ({ handle }) => {
     };
 
     fetchStats();
-  }, [handle, isMounted]);
+  }, [handle]);
 
-  if (!isMounted || loading) {
+  if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
         <Loader className="h-8 w-8 animate-spin" />
@@ -144,44 +116,19 @@ const YouTubeStats: React.FC<{ handle: string }> = ({ handle }) => {
   return null;
 }
 
-const InstagramStats: React.FC<{ handle: string, businessIdKey?: string }> = ({ handle, businessIdKey = 'instagram_business_account_id' }) => {
+const InstagramStats: React.FC<{ handle: string }> = ({ handle }) => {
     const [stats, setStats] = useState<GetInstagramBusinessStatsOutput | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [isMounted, setIsMounted] = useState(false);
 
     useEffect(() => {
-        setIsMounted(true);
-    }, []);
-
-    useEffect(() => {
-        if (!isMounted) return;
-
         const fetchStats = async () => {
             setLoading(true);
             setError(null);
             setStats(null);
             try {
-                let accessToken: string | undefined;
-                let businessAccountId: string | undefined;
-                const storedKeys = localStorage.getItem("apiKeys");
-                if (storedKeys) {
-                    const keys: ApiKey[] = JSON.parse(storedKeys);
-                    accessToken = keys.find(k => k.service === 'instagram_access_token')?.key;
-                    businessAccountId = keys.find(k => k.service === businessIdKey)?.key;
-                }
-
-                if (!accessToken) {
-                    throw new Error("Instagram Access Token not found. Please add it in the API Key Manager with the service name 'instagram_access_token'.");
-                }
-                if (!businessAccountId) {
-                    throw new Error(`Instagram Business Account ID key '${businessIdKey}' not found. Please add it in the API Key Manager.`);
-                }
-                
                 const result = await getInstagramBusinessStats({
                     usernameToQuery: handle.startsWith('@') ? handle.substring(1) : handle,
-                    instagramBusinessAccountId: businessAccountId,
-                    accessToken: accessToken,
                 });
                 setStats(result);
             } catch (e: any) {
@@ -192,9 +139,9 @@ const InstagramStats: React.FC<{ handle: string, businessIdKey?: string }> = ({ 
         };
 
         fetchStats();
-    }, [handle, isMounted, businessIdKey]);
+    }, [handle]);
 
-    if (!isMounted || loading) {
+    if (loading) {
         return (
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
                 <Loader className="h-8 w-8 animate-spin" />
@@ -261,7 +208,6 @@ const socialAccounts: SocialAccount[] = [
     href: "https://www.instagram.com/ilovesanrio666",
     icon: <InstagramIcon className="h-6 w-6" />,
     statsComponent: InstagramStats,
-    businessIdKey: "instagram_business_account_id",
   },
   {
     platform: "Instagram",
@@ -269,7 +215,6 @@ const socialAccounts: SocialAccount[] = [
     href: "https://www.instagram.com/truegarments_",
     icon: <InstagramIcon className="h-6 w-6" />,
     statsComponent: InstagramStats,
-    businessIdKey: "instagram_business_account_id",
   },
 ];
 
@@ -313,7 +258,7 @@ export default function SocialNetworks({ className }: { className?: string }) {
             </Button>
             
             <div className="flex-grow flex flex-col items-center">
-                <StatsComponent handle={account.handle} businessIdKey={account.businessIdKey} />
+                <StatsComponent handle={account.handle} />
             </div>
 
             <Button

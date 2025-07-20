@@ -10,10 +10,10 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
+import { getApiKey } from '../tools/get-api-key';
 
 const GetYoutubeStatsInputSchema = z.object({
   channelHandle: z.string().describe('The handle of the YouTube channel (e.g., @transdavismo).'),
-  apiKey: z.string().describe('The YouTube Data API v3 key.'),
 });
 export type GetYoutubeStatsInput = z.infer<typeof GetYoutubeStatsInputSchema>;
 
@@ -28,8 +28,13 @@ export type GetYoutubeStatsOutput = z.infer<typeof GetYoutubeStatsOutputSchema>;
 
 
 async function fetchChannelData(input: GetYoutubeStatsInput): Promise<GetYoutubeStatsOutput> {
+  const apiKey = await getApiKey({ service: 'youtube_api_key' });
+  if (!apiKey) {
+    throw new Error('YouTube API key not found in environment variables.');
+  }
+
   const handle = input.channelHandle.startsWith('@') ? input.channelHandle.substring(1) : input.channelHandle;
-  const url = `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&forHandle=${handle}&key=${input.apiKey}`;
+  const url = `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&forHandle=${handle}&key=${apiKey}`;
 
   try {
     const response = await fetch(url);

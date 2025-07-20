@@ -10,11 +10,10 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
+import { getApiKey } from '../tools/get-api-key';
 
 const GetInstagramBusinessStatsInputSchema = z.object({
   usernameToQuery: z.string().describe('The username of the Instagram Business Account to query.'),
-  instagramBusinessAccountId: z.string().describe('The ID of your own Instagram Business Account making the request.'),
-  accessToken: z.string().describe('A valid Instagram Graph API access token.'),
 });
 export type GetInstagramBusinessStatsInput = z.infer<typeof GetInstagramBusinessStatsInputSchema>;
 
@@ -27,8 +26,15 @@ const GetInstagramBusinessStatsOutputSchema = z.object({
 export type GetInstagramBusinessStatsOutput = z.infer<typeof GetInstagramBusinessStatsOutputSchema>;
 
 async function fetchBusinessDiscoveryData(input: GetInstagramBusinessStatsInput): Promise<GetInstagramBusinessStatsOutput> {
+  const accessToken = await getApiKey({ service: 'instagram_access_token' });
+  const instagramBusinessAccountId = await getApiKey({ service: 'instagram_business_account_id'});
+
+  if (!accessToken || !instagramBusinessAccountId) {
+    throw new Error('Instagram credentials not found in environment variables.');
+  }
+
   const fields = 'business_discovery.username(' + input.usernameToQuery + '){followers_count,media_count,profile_picture_url,username}';
-  const url = `https://graph.facebook.com/v20.0/${input.instagramBusinessAccountId}?fields=${fields}&access_token=${input.accessToken}`;
+  const url = `https://graph.facebook.com/v20.0/${instagramBusinessAccountId}?fields=${fields}&access_token=${accessToken}`;
 
   try {
     const response = await fetch(url);
