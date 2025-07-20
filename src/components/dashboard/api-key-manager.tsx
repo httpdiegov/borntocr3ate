@@ -60,18 +60,20 @@ export default function ApiKeyManager({ className }: { className?: string }) {
 
   useEffect(() => {
     setIsMounted(true);
-    const storedKeys = localStorage.getItem("apiKeys");
-    if (storedKeys) {
-      setKeys(JSON.parse(storedKeys));
+    try {
+      const storedKeys = localStorage.getItem("apiKeys");
+      if (storedKeys) {
+        setKeys(JSON.parse(storedKeys));
+      }
+    } catch (error) {
+      console.error("Failed to parse API keys from localStorage", error);
+      setKeys([]);
     }
   }, []);
 
   useEffect(() => {
     if (isMounted) {
       localStorage.setItem("apiKeys", JSON.stringify(keys));
-      keys.forEach(key => {
-        localStorage.setItem(key.service, key.key);
-      });
     }
   }, [keys, isMounted]);
 
@@ -93,9 +95,8 @@ export default function ApiKeyManager({ className }: { className?: string }) {
     }
   };
 
-  const handleDeleteKey = (id: string, serviceName: string) => {
+  const handleDeleteKey = (id: string) => {
     setKeys(keys.filter((key) => key.id !== id));
-    localStorage.removeItem(serviceName);
     toast({ title: "API Key deleted." });
   };
 
@@ -220,7 +221,7 @@ export default function ApiKeyManager({ className }: { className?: string }) {
                         <AlertDialogFooter>
                           <AlertDialogCancel>Cancel</AlertDialogCancel>
                           <AlertDialogAction
-                            onClick={() => handleDeleteKey(apiKey.id, apiKey.service)}
+                            onClick={() => handleDeleteKey(apiKey.id)}
                           >
                             Delete
                           </AlertDialogAction>

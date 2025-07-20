@@ -22,6 +22,12 @@ type SocialAccount = {
   icon: JSX.Element;
 };
 
+type ApiKey = {
+  id: string;
+  service: string;
+  key: string;
+};
+
 const socialAccounts: SocialAccount[] = [
   {
     platform: "YouTube",
@@ -37,15 +43,28 @@ export default function SocialNetworks({ className }: { className?: string }) {
   const [stats, setStats] = useState<GetYoutubeStatsOutput | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isMounted) return;
+
     const fetchStats = async () => {
       setLoading(true);
       setError(null);
       setStats(null);
 
       try {
-        const apiKey = localStorage.getItem("youtube_api_key");
+        let apiKey: string | undefined;
+        const storedKeys = localStorage.getItem("apiKeys");
+        if (storedKeys) {
+          const keys: ApiKey[] = JSON.parse(storedKeys);
+          apiKey = keys.find(k => k.service === 'youtube_api_key')?.key;
+        }
+        
         if (!apiKey) {
           throw new Error("YouTube API key not found. Please add it in the API Key Manager with the service name 'youtube_api_key'.");
         }
@@ -63,7 +82,7 @@ export default function SocialNetworks({ className }: { className?: string }) {
     };
 
     fetchStats();
-  }, [currentIndex]);
+  }, [currentIndex, isMounted]);
 
   const handleNext = () => {
     setCurrentIndex((prev) => (prev + 1) % socialAccounts.length);
@@ -78,6 +97,15 @@ export default function SocialNetworks({ className }: { className?: string }) {
   const account = socialAccounts[currentIndex];
 
   const renderContent = () => {
+    if (!isMounted) {
+       return (
+        <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+          <Loader className="h-8 w-8 animate-spin" />
+          <p className="mt-2">Loading...</p>
+        </div>
+      );
+    }
+    
     if (loading) {
       return (
         <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
