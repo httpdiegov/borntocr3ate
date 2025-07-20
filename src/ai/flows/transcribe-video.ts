@@ -36,8 +36,10 @@ export async function transcribeVideo(input: TranscribeVideoInput): Promise<Tran
   
   const { output } = await ai.generate({
       model: 'googleai/gemini-1.5-flash',
-      prompt: 'Transcribe the audio from the following video accurately. Provide only the text of the transcription.',
-      media: [{ url: input.videoDataUri, contentType: input.contentType }],
+      prompt: [
+        { media: { url: input.videoDataUri, contentType: input.contentType } },
+        { text: 'Transcribe the audio from the following video accurately. Provide only the text of the transcription.' },
+      ],
       output: {
         schema: TranscribeVideoOutputSchema,
       },
