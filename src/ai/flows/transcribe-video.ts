@@ -6,7 +6,7 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 
-// Define the schema for the input: a video file as a data URI and its content type
+// Define the schema for the input: a video file as a data URI
 const TranscribeVideoInputSchema = z.object({
   videoDataUri: z
     .string()
@@ -25,38 +25,31 @@ export type TranscribeVideoOutput = z.infer<
   typeof TranscribeVideoOutputSchema
 >;
 
-const transcriptionPrompt = ai.definePrompt({
-    name: 'transcriptionPrompt',
-    input: { schema: TranscribeVideoInputSchema },
-    output: { schema: TranscribeVideoOutputSchema },
-    model: 'googleai/gemini-1.5-flash',
-    prompt: `Transcribe the audio from the following video accurately. Provide only the text of the transcription.
-    
-    Video: {{media url=videoDataUri contentType=contentType}}
-    `
-});
-
-const transcribeVideoFlow = ai.defineFlow(
-  {
-    name: 'transcribeVideoFlow',
-    inputSchema: TranscribeVideoInputSchema,
-    outputSchema: TranscribeVideoOutputSchema,
-  },
-  async (input) => {
-    console.log('Starting video transcription with Genkit flow...');
-    
-    const { output } = await transcriptionPrompt(input);
-    
-    if (!output?.transcription) {
-        console.error("Transcription failed. AI did not return valid text.");
-        throw new Error("La IA no pudo generar una transcripción.");
-    }
-    
-    console.log('Transcription completed successfully.');
-    return output;
-  }
-);
-
+/**
+ * Transcribes a video using the Gemini API.
+ * This function bypasses prompt templating to directly control the multimodal request.
+ * @param input The video data to transcribe.
+ * @returns The transcription text.
+ */
 export async function transcribeVideo(input: TranscribeVideoInput): Promise<TranscribeVideoOutput> {
-    return transcribeVideoFlow(input);
+  console.log('Starting video transcription with direct ai.generate call...');
+  
+  const { output } = await ai.generate({
+      model: 'googleai/gemini-1.5-flash',
+      prompt: [
+        { text: 'Transcribe the audio from the following video accurately. Provide only the text of the transcription.' },
+        { media: { url: input.videoDataUri, contentType: input.contentType } }
+      ],
+      output: {
+        schema: TranscribeVideoOutputSchema,
+      },
+  });
+
+  if (!output?.transcription) {
+      console.error("Transcription failed. AI did not return valid text.");
+      throw new Error("La IA no pudo generar una transcripción.");
+  }
+  
+  console.log('Transcription completed successfully.');
+  return output;
 }
