@@ -32,6 +32,7 @@ import { Label } from "@/components/ui/label";
 import { updateApiKey } from "@/ai/flows/update-api-key";
 import { getApiKeys } from "@/ai/flows/get-api-keys";
 import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
 
 
 const predefinedApiKeys: { name: string; key: string }[] = [
@@ -43,8 +44,13 @@ const predefinedApiKeys: { name: string; key: string }[] = [
 
 const availableTags = ["IA", "Redes Sociales", "Otro"];
 
+interface ApiKeyInfo {
+    value?: string;
+    tags: string[];
+}
 
 export default function ApiKeyManager({ className }: { className?: string }) {
+  const [keyInfo, setKeyInfo] = useState<Record<string, ApiKeyInfo>>({});
   const [keyValues, setKeyValues] = useState<Record<string, string>>({});
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
   const [newKeyName, setNewKeyName] = useState("");
@@ -60,12 +66,20 @@ export default function ApiKeyManager({ className }: { className?: string }) {
       try {
         const keyNames = predefinedApiKeys.map(k => k.key);
         const result = await getApiKeys({ services: keyNames });
-        setKeyValues(result.keys); 
+        setKeyInfo(result.keys); 
+        // Pre-fill keyValues with placeholders for existing keys
+        const initialValues: Record<string, string> = {};
+        for (const key in result.keys) {
+            if (result.keys[key]?.value) {
+                initialValues[key] = result.keys[key].value!;
+            }
+        }
+        setKeyValues(initialValues);
       } catch (error) {
-        console.error("Failed to fetch API key values:", error);
+        console.error("Failed to fetch API key info:", error);
         toast({
-          title: "Could not fetch key values",
-          description: "There was an error fetching the values of the API keys.",
+          title: "Could not fetch key info",
+          description: "There was an error fetching API key information.",
           variant: "destructive"
         });
       } finally {
@@ -97,6 +111,7 @@ export default function ApiKeyManager({ className }: { className?: string }) {
 
     setLoadingKey(key);
     try {
+      // For predefined keys, we don't re-submit tags, just the value
       const result = await updateApiKey({ service: key, value });
       if (result.success) {
         toast({
@@ -105,7 +120,7 @@ export default function ApiKeyManager({ className }: { className?: string }) {
         });
         const keyNames = predefinedApiKeys.map(k => k.key);
         const fetchResult = await getApiKeys({ services: keyNames });
-        setKeyValues(fetchResult.keys);
+        setKeyInfo(fetchResult.keys);
       } else {
          throw new Error(result.message || 'An unknown error occurred.');
       }
@@ -192,11 +207,17 @@ export default function ApiKeyManager({ className }: { className?: string }) {
             {predefinedApiKeys.map(({ name, key }) => {
               const isLoading = loadingKey === key;
               const isVisible = visibleKeys[key];
-              const hasValue = !!keyValues[key];
+              const info = keyInfo[key];
+              const hasValue = !!info?.value;
 
               return (
                 <div key={key} className="space-y-2">
-                  <Label htmlFor={key}>{name}</Label>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Label htmlFor={key} className="flex-1">{name}</Label>
+                    {info?.tags?.map(tag => (
+                      <Badge key={tag} variant="secondary">{tag}</Badge>
+                    ))}
+                  </div>
                   <div className="flex items-center gap-2">
                     <Input
                       id={key}
@@ -207,7 +228,7 @@ export default function ApiKeyManager({ className }: { className?: string }) {
                       disabled={isLoading}
                     />
                     
-                    <Button variant="ghost" size="icon" onClick={() => toggleVisibility(key)} disabled={isLoading}>
+                    <Button variant="ghost" size="icon" onClick={() => toggleVisibility(key)} disabled={isLoading || !hasValue}>
                       {isVisible ? <EyeOff /> : <Eye />}
                       <span className="sr-only">
                         {isVisible ? 'Hide' : 'Show'} key

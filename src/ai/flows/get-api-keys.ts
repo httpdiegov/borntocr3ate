@@ -1,40 +1,43 @@
 'use server';
 
 /**
- * @fileOverview A flow for fetching the values of multiple API keys from Secret Manager.
+ * @fileOverview A flow for fetching the values and tags of multiple API keys from Secret Manager.
  */
 
 import { z } from 'zod';
-import { accessSecret } from '../tools/get-api-key-internal';
+import { getSecretWithMetadata } from '../tools/get-api-key-internal';
 
 const GetApiKeysInputSchema = z.object({
   services: z.array(z.string()).describe('A list of secret names to fetch.'),
 });
 export type GetApiKeysInput = z.infer<typeof GetApiKeysInputSchema>;
 
+const ApiKeyInfoSchema = z.object({
+  value: z.string().optional(),
+  tags: z.array(z.string()),
+});
+
 const GetApiKeysOutputSchema = z.object({
-  keys: z.record(z.string()).describe('A map of secret names to their values.'),
+  keys: z.record(ApiKeyInfoSchema).describe('A map of secret names to their values and tags.'),
 });
 export type GetApiKeysOutput = z.infer<typeof GetApiKeysOutputSchema>;
 
 export async function getApiKeys(input: GetApiKeysInput): Promise<GetApiKeysOutput> {
   const keyPromises = input.services.map(async (service) => {
     try {
-      const secret = await accessSecret(service);
-      return { service, secret: secret || null };
+      const secretInfo = await getSecretWithMetadata(service);
+      return { service, secretInfo };
     } catch (error) {
       // If a secret is not found, we just return null for its value.
-      return { service, secret: null };
+      return { service, secretInfo: { value: undefined, tags: [] } };
     }
   });
 
   const results = await Promise.all(keyPromises);
-  const keys: Record<string, string> = {};
+  const keys: Record<string, { value?: string; tags: string[] }> = {};
 
   results.forEach(item => {
-    if (item.secret) {
-      keys[item.service] = item.secret;
-    }
+    keys[item.service] = item.secretInfo;
   });
 
   return { keys };

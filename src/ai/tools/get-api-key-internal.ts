@@ -21,6 +21,67 @@ function getSecretManagerClient() {
   }
 }
 
+async function getSecretValue(secretManagerClient: SecretManagerServiceClient, name: string): Promise<string | undefined> {
+  try {
+    const [version] = await secretManagerClient.accessSecretVersion({ name: `${name}/versions/latest` });
+    const payload = version.payload?.data?.toString();
+    if (payload) {
+      console.log(`Successfully accessed secret value for '${name}'.`);
+    } else {
+      console.warn(`Secret '${name}' exists but has no payload/value.`);
+    }
+    return payload;
+  } catch (error: any) {
+    if (error.code === 5) { // NOT_FOUND for the version
+        console.warn(`No versions found for secret '${name}'. It might exist but be empty.`);
+        return undefined;
+    }
+    console.error(`Failed to access secret version for ${name}:`, error.message);
+    // Re-throw other errors
+    throw error;
+  }
+}
+
+function parseTagsFromLabels(labels: { [key: string]: string } | null | undefined): string[] {
+    if (!labels) return [];
+    return Object.keys(labels)
+      .filter(key => key.startsWith('tag-'))
+      .map(key => {
+        const tag = key.substring(4).replace(/-/g, ' ');
+        // Capitalize first letter of each word
+        return tag.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+      });
+}
+
+export async function getSecretWithMetadata(secretName: string): Promise<{ value?: string; tags: string[] }> {
+    const projectId = process.env.GCLOUD_PROJECT;
+    if (!projectId) {
+      throw new Error('GCLOUD_PROJECT environment variable not set.');
+    }
+  
+    const secretManagerClient = getSecretManagerClient();
+    const name = `projects/${projectId}/secrets/${secretName}`;
+    console.log(`Attempting to get metadata for secret: ${name}`);
+
+    try {
+        const [secret] = await secretManagerClient.getSecret({ name });
+        const tags = parseTagsFromLabels(secret.labels);
+        const value = await getSecretValue(secretManagerClient, name);
+
+        console.log(`Successfully retrieved metadata for secret '${secretName}'.`);
+        return { value, tags };
+
+    } catch (error: any) {
+        if (error.code === 5) { // NOT_FOUND for the secret itself
+            console.warn(`Secret '${secretName}' not found.`);
+            return { value: undefined, tags: [] };
+        }
+        console.error(`Failed to get secret metadata for ${secretName}:`, error);
+        throw error;
+    }
+}
+
+
 export async function accessSecret(secretName: string): Promise<string | undefined> {
   const projectId = process.env.GCLOUD_PROJECT;
   if (!projectId) {
@@ -30,19 +91,6 @@ export async function accessSecret(secretName: string): Promise<string | undefin
   }
   
   const secretManagerClient = getSecretManagerClient();
-
-  // Removing try-catch to let the actual Google Cloud error surface.
-  // This will give a much more specific error message if something is wrong.
-  const name = `projects/${projectId}/secrets/${secretName}/versions/latest`;
-  console.log(`Attempting to access secret: ${name}`);
-  const [version] = await secretManagerClient.accessSecretVersion({ name });
-
-  const payload = version.payload?.data?.toString();
-  if (payload) {
-    console.log(`Successfully accessed secret '${secretName}'.`);
-  } else {
-    // This case should ideally not happen if a version exists, but good to have.
-    console.warn(`Secret '${secretName}' exists but has no payload/value.`);
-  }
-  return payload;
+  const name = `projects/${projectId}/secrets/${secretName}`;
+  return getSecretValue(secretManagerClient, name);
 }
