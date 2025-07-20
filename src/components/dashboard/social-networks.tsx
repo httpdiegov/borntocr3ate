@@ -261,7 +261,7 @@ const socialAccounts: SocialAccount[] = [
     href: "https://www.instagram.com/ilovesanrio666",
     icon: <InstagramIcon className="h-6 w-6" />,
     statsComponent: InstagramStats,
-    businessIdKey: "instagram_business_account_id_sanrio",
+    businessIdKey: "instagram_business_account_id",
   },
 ];
 
