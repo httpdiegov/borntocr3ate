@@ -1,6 +1,7 @@
 "use client";
 
-import { useFormState, useFormStatus } from "react-dom";
+import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
 import { handleGenerateNewsBrief } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,7 +21,8 @@ function SubmitButton() {
 
 export default function NewsBrief({ className }: { className?: string }) {
   const initialState = { newsBrief: null, message: "" };
-  const [state, dispatch] = useFormState(handleGenerateNewsBrief, initialState);
+  const [state, dispatch] = useActionState(handleGenerateNewsBrief, initialState);
+  const { pending } = useFormStatus();
 
   return (
     <Card className={className}>
@@ -50,7 +52,7 @@ export default function NewsBrief({ className }: { className?: string }) {
           <p className="text-destructive mt-4">{state.message}</p>
         )}
         <div className="mt-6">
-          {useFormStatus().pending ? (
+          {pending ? (
             <div className="space-y-2">
               <Skeleton className="h-4 w-full" />
               <Skeleton className="h-4 w-full" />
