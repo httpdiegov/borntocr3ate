@@ -6,6 +6,7 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
+import { googleAI } from '@genkit-ai/googleai';
 
 // Define el esquema para la entrada del flujo
 const AnalyzeVideoInputSchema = z.object({
@@ -36,6 +37,7 @@ const videoAnalysisPrompt = ai.definePrompt({
     name: 'videoAnalysisPrompt',
     input: { schema: AnalyzeVideoInputSchema },
     output: { schema: AnalyzeVideoOutputSchema },
+    model: googleAI.model('gemini-1.5-flash'), // Specify model directly
     prompt: `Eres un experto en redes sociales y edición de video, especializado en identificar momentos virales en contenido largo.
     
     Tu tarea es analizar la siguiente transcripción de un video y extraer de 2 a 4 clips potenciales que sean perfectos para plataformas como TikTok, Instagram Reels o YouTube Shorts.
