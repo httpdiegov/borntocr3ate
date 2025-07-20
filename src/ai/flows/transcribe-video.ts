@@ -34,8 +34,9 @@ export async function transcribeVideo(input: TranscribeVideoInput): Promise<Tran
       throw new Error('Gemini API key not found in Secret Manager.');
     }
 
-    const [header, base64Data] = input.videoDataUri.split(',');
-    if (!header || !base64Data) {
+    // The API expects the base64 data without the data URI prefix.
+    const base64Data = input.videoDataUri.split(',')[1];
+    if (!base64Data) {
       throw new Error('Invalid data URI format.');
     }
     
