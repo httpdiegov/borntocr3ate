@@ -15,9 +15,10 @@ import { KeyRound, Save, Loader2 } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { updateApiKey } from "@/ai/flows/update-api-key";
 
-type ServiceKey = "youtube_api_key" | "instagram_access_token" | "instagram_business_account_id";
+type ServiceKey = "youtube_api_key" | "instagram_access_token" | "instagram_business_account_id" | "GEMINI_API_KEY";
 
 const apiKeys: { name: string; key: ServiceKey }[] = [
+  { name: "Gemini API Key", key: "GEMINI_API_KEY" },
   { name: "YouTube API Key", key: "youtube_api_key" },
   { name: "Instagram Access Token", key: "instagram_access_token" },
   { name: "Instagram Business Account ID", key: "instagram_business_account_id" },

@@ -7,3 +7,4 @@ import '@/ai/flows/get-youtube-stats.ts';
 import '@/ai/flows/get-instagram-business-stats.ts';
 import '@/ai/tools/get-api-key';
 import '@/ai/flows/update-api-key';
+import './tools/get-api-key-internal';

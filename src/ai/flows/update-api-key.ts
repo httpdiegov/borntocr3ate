@@ -13,7 +13,7 @@ const secretManagerClient = new SecretManagerServiceClient();
 
 const UpdateApiKeyInputSchema = z.object({
   service: z
-    .enum(['youtube_api_key', 'instagram_access_token', 'instagram_business_account_id'])
+    .enum(['youtube_api_key', 'instagram_access_token', 'instagram_business_account_id', 'GEMINI_API_KEY'])
     .describe('The service for which to update the API key.'),
   value: z.string().describe('The new API key value.'),
 });
