@@ -62,8 +62,8 @@ const videoAnalysisPrompt = ai.definePrompt({
 });
 
 
-// Define el flujo que orquesta la llamada al prompt
-export const analyzeVideoContentFlow = ai.defineFlow(
+// Define el flujo que orquesta la llamada al prompt y que será exportado
+export const analyzeVideoContent = ai.defineFlow(
   {
     name: 'analyzeVideoContentFlow',
     inputSchema: AnalyzeVideoInputSchema,
@@ -84,9 +84,3 @@ export const analyzeVideoContentFlow = ai.defineFlow(
     return output;
   }
 );
-
-
-// Función exportada que el frontend llamará
-export async function analyzeVideoContent(input: AnalyzeVideoInput): Promise<AnalyzeVideoOutput> {
-  return analyzeVideoContentFlow(input);
-}
