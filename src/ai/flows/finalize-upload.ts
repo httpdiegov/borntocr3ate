@@ -23,7 +23,10 @@ function getStorageClient() {
 }
 
 const FinalizeUploadInputSchema = z.object({
-  gcsUri: z.string().startsWith('gs://').describe('The GCS URI of the file to make public.'),
+  gcsUri: z.string().refine(
+    (uri) => uri.startsWith('gs://'), 
+    { message: "Invalid GCS URI format. Must start with 'gs://'." }
+  ).describe('The GCS URI of the file to make public.'),
 });
 export type FinalizeUploadInput = z.infer<typeof FinalizeUploadInputSchema>;
 
