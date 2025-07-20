@@ -39,13 +39,13 @@ export async function accessSecret(secretName: string): Promise<string | undefin
     if (payload) {
       console.log(`Successfully accessed secret '${secretName}'.`);
     } else {
-      console.warn(`Secret '${secretName}' has no payload.`);
+      console.warn(`Secret '${secretName}' exists but has no payload/value.`);
     }
     return payload;
   } catch (error: any) {
     // Gracefully handle cases where the secret or version doesn't exist yet.
     if (error.code === 5) { // GRPC 'NOT_FOUND' error code
-      console.warn(`Secret '${secretName}' or its latest version not found in project '${projectId}'.`);
+      console.warn(`SECRET NOT FOUND: Secret '${secretName}' or its 'latest' version not found in project '${projectId}'. Please ensure the secret exists and has at least one enabled version.`);
     } else {
       // Log other errors for debugging
       console.error(`Failed to access secret '${secretName}' in project '${projectId}'. Error:`, error);

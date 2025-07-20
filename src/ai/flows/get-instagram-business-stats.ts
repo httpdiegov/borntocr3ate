@@ -30,7 +30,10 @@ async function fetchBusinessDiscoveryData(input: GetInstagramBusinessStatsInput)
   const instagramBusinessAccountId = await getApiKey({ service: 'instagram_business_account_id'});
 
   if (!accessToken || !instagramBusinessAccountId) {
-    throw new Error('Instagram credentials not found in environment variables.');
+    let missing = [];
+    if (!accessToken) missing.push('Instagram Access Token');
+    if (!instagramBusinessAccountId) missing.push('Instagram Business Account ID');
+    throw new Error(`Missing credentials in Secret Manager: ${missing.join(', ')}.`);
   }
 
   const fields = 'business_discovery.username(' + input.usernameToQuery + '){followers_count,media_count,profile_picture_url,username}';
