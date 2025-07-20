@@ -61,10 +61,17 @@ async function generateUrl(input: GenerateUploadUrlInput): Promise<GenerateUploa
         await storage.createBucket(bucketName);
         console.log(`Bucket '${bucketName}' created.`);
         
-        // Optional: Make the bucket public for simplicity in this demo.
-        // For production apps, you should use more granular permissions.
-        await bucket.makePublic();
-        console.log(`Bucket '${bucketName}' made public.`);
+        // SET CORS configuration to allow browser uploads.
+        await bucket.setCorsConfiguration([
+            {
+                maxAgeSeconds: 3600, // Cache preflight responses for 1 hour
+                method: ['PUT'], // Allow PUT requests for the upload
+                origin: ['*'], // Allow all origins (safe due to signed URL)
+                responseHeader: ['Content-Type'],
+            },
+        ]);
+        console.log(`CORS configuration set for bucket '${bucketName}'.`);
+
     } catch (creationError: any) {
         console.error(`Failed to create bucket '${bucketName}':`, creationError);
         throw new Error(`Failed to create storage bucket: ${creationError.message}`);
@@ -102,3 +109,4 @@ export const generateUploadUrl = ai.defineFlow(
     },
     generateUrl
 );
+
