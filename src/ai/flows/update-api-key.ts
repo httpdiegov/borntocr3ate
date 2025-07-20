@@ -8,8 +8,34 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
+import fs from 'fs';
+import path from 'path';
 
-const secretManagerClient = new SecretManagerServiceClient();
+let secretManagerClient: SecretManagerServiceClient;
+
+// This function initializes the client with explicit credentials
+// to ensure authentication works correctly in local development.
+function initializeClient() {
+  if (secretManagerClient) {
+    return;
+  }
+  
+  const credentialsPath = path.resolve(process.cwd(), 'google-credentials.json');
+
+  if (fs.existsSync(credentialsPath)) {
+    console.log("Found google-credentials.json, using it for update-api-key flow.");
+    secretManagerClient = new SecretManagerServiceClient({
+      keyFilename: credentialsPath,
+    });
+  } else {
+    console.log("google-credentials.json not found, using default application credentials for update-api-key flow.");
+    // This will work in a deployed Firebase/Google Cloud environment
+    secretManagerClient = new SecretManagerServiceClient();
+  }
+}
+
+initializeClient();
+
 
 const UpdateApiKeyInputSchema = z.object({
   service: z
