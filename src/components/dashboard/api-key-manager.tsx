@@ -9,6 +9,12 @@ import {
   CardTitle,
   CardFooter
 } from "@/components/ui/card";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -27,7 +33,6 @@ const predefinedApiKeys: { name: string; key: string }[] = [
 
 export default function ApiKeyManager({ className }: { className?: string }) {
   const [keyValues, setKeyValues] = useState<Record<string, string>>({});
-  const [savedKeys, setSavedKeys] = useState<Record<string, string>>({});
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
   const [newKeyName, setNewKeyName] = useState("");
   const [newKeyValue, setNewKeyValue] = useState("");
@@ -41,8 +46,7 @@ export default function ApiKeyManager({ className }: { className?: string }) {
       try {
         const keyNames = predefinedApiKeys.map(k => k.key);
         const result = await getApiKeys({ services: keyNames });
-        setSavedKeys(result.keys);
-        setKeyValues(result.keys); // Initialize input values with fetched keys
+        setKeyValues(result.keys); 
       } catch (error) {
         console.error("Failed to fetch API key values:", error);
         toast({
@@ -85,7 +89,7 @@ export default function ApiKeyManager({ className }: { className?: string }) {
           title: "Success",
           description: result.message || `${name} has been updated.`,
         });
-        setSavedKeys((prev) => ({ ...prev, [key]: value }));
+        // We don't need to update savedKeys state anymore as we fetch on load
       } else {
          throw new Error(result.message || 'An unknown error occurred.');
       }
@@ -159,10 +163,10 @@ export default function ApiKeyManager({ className }: { className?: string }) {
           <div className="space-y-4">
              <h3 className="text-lg font-medium">Predefined Secrets</h3>
             {predefinedApiKeys.map(({ name, key }) => {
-              const isSet = !!savedKeys[key];
               const isLoading = loadingKey === key;
               const isVisible = visibleKeys[key];
-              
+              const value = keyValues[key] || "";
+
               return (
                 <div key={key} className="space-y-2">
                   <Label htmlFor={key}>{name}</Label>
@@ -170,20 +174,20 @@ export default function ApiKeyManager({ className }: { className?: string }) {
                     <Input
                       id={key}
                       type={isVisible ? "text" : "password"}
-                      placeholder={"Key not set..."}
-                      value={keyValues[key] || ""}
+                      placeholder={value ? "••••••••••••" : "Key not set..."}
+                      value={value}
                       onChange={(e) => handleInputChange(key, e.target.value)}
                       disabled={isLoading}
                     />
                     
-                    <Button variant="ghost" size="icon" onClick={() => toggleVisibility(key)} disabled={isLoading || !isSet}>
+                    <Button variant="ghost" size="icon" onClick={() => toggleVisibility(key)} disabled={isLoading || !value}>
                       {isVisible ? <EyeOff /> : <Eye />}
                       <span className="sr-only">
                         {isVisible ? 'Hide' : 'Show'} key
                       </span>
                     </Button>
                     
-                    <Button onClick={() => handleSaveKey(key, name)} disabled={isLoading || !keyValues[key]} size="icon">
+                    <Button onClick={() => handleSaveKey(key, name)} disabled={isLoading || !value} size="icon">
                         {isLoading ? <Loader2 className="animate-spin" /> : <Save />}
                         <span className="sr-only">Save {name}</span>
                     </Button>
@@ -196,44 +200,50 @@ export default function ApiKeyManager({ className }: { className?: string }) {
       </CardContent>
       <CardFooter className="flex-col items-start gap-4 pt-6">
           <Separator />
-          <div className="w-full space-y-2 mt-4">
-             <h3 className="text-lg font-medium">Add New Secret</h3>
-             <div className="space-y-2">
-                <Label htmlFor="newKeyName">Secret Name</Label>
-                 <Input
-                    id="newKeyName"
-                    placeholder="e.g., MY_CUSTOM_API_KEY"
-                    value={newKeyName}
-                    onChange={(e) => setNewKeyName(e.target.value)}
-                    disabled={isLoadingNew}
-                 />
-             </div>
-             <div className="space-y-2">
-                <Label htmlFor="newKeyValue">Secret Value</Label>
-                 <div className="flex items-center gap-2">
-                   <Input
-                      id="newKeyValue"
-                      type={visibleKeys['new_key'] ? 'text' : 'password'}
-                      placeholder="Enter the secret value"
-                      value={newKeyValue}
-                      onChange={(e) => setNewKeyValue(e.target.value)}
-                      disabled={isLoadingNew}
-                   />
-                    <Button variant="ghost" size="icon" onClick={() => toggleVisibility('new_key')} disabled={isLoadingNew}>
-                      {visibleKeys['new_key'] ? <EyeOff /> : <Eye />}
-                      <span className="sr-only">Toggle new key visibility</span>
+          <Accordion type="single" collapsible className="w-full">
+            <AccordionItem value="item-1" className="border-b-0">
+              <AccordionTrigger className="text-lg font-medium">Add New Secret</AccordionTrigger>
+              <AccordionContent>
+                <div className="w-full space-y-4">
+                   <div className="space-y-2">
+                      <Label htmlFor="newKeyName">Secret Name</Label>
+                       <Input
+                          id="newKeyName"
+                          placeholder="e.g., MY_CUSTOM_API_KEY"
+                          value={newKeyName}
+                          onChange={(e) => setNewKeyName(e.target.value)}
+                          disabled={isLoadingNew}
+                       />
+                   </div>
+                   <div className="space-y-2">
+                      <Label htmlFor="newKeyValue">Secret Value</Label>
+                       <div className="flex items-center gap-2">
+                         <Input
+                            id="newKeyValue"
+                            type={visibleKeys['new_key'] ? 'text' : 'password'}
+                            placeholder="Enter the secret value"
+                            value={newKeyValue}
+                            onChange={(e) => setNewKeyValue(e.target.value)}
+                            disabled={isLoadingNew}
+                         />
+                          <Button variant="ghost" size="icon" onClick={() => toggleVisibility('new_key')} disabled={isLoadingNew}>
+                            {visibleKeys['new_key'] ? <EyeOff /> : <Eye />}
+                            <span className="sr-only">Toggle new key visibility</span>
+                          </Button>
+                       </div>
+                   </div>
+                    <Button onClick={handleAddNewKey} disabled={isLoadingNew || !newKeyName || !newKeyValue}>
+                      {isLoadingNew ? (
+                        <Loader2 className="animate-spin mr-2" />
+                      ) : (
+                        <Plus className="mr-2" />
+                      )}
+                      Add New Secret
                     </Button>
-                 </div>
-             </div>
-              <Button onClick={handleAddNewKey} disabled={isLoadingNew || !newKeyName || !newKeyValue}>
-                {isLoadingNew ? (
-                  <Loader2 className="animate-spin mr-2" />
-                ) : (
-                  <Plus className="mr-2" />
-                )}
-                Add New Secret
-              </Button>
-          </div>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
       </CardFooter>
     </Card>
   );
