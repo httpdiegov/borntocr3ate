@@ -17,9 +17,7 @@ import { Label } from "@/components/ui/label";
 import { updateApiKey } from "@/ai/flows/update-api-key";
 import { Separator } from "@/components/ui/separator";
 
-type ServiceKey = "youtube_api_key" | "instagram_access_token" | "instagram_business_account_id" | "GEMINI_API_KEY";
-
-const predefinedApiKeys: { name: string; key: ServiceKey }[] = [
+const predefinedApiKeys: { name: string; key: string }[] = [
   { name: "Gemini API Key", key: "GEMINI_API_KEY" },
   { name: "YouTube API Key", key: "youtube_api_key" },
   { name: "Instagram Access Token", key: "instagram_access_token" },
@@ -148,7 +146,7 @@ export default function ApiKeyManager({ className }: { className?: string }) {
       </CardContent>
       <CardFooter className="flex-col items-start gap-4 pt-6">
           <Separator />
-          <div className="w-full space-y-2">
+          <div className="w-full space-y-2 mt-4">
              <h3 className="text-lg font-medium">Add New Secret</h3>
              <div className="space-y-2">
                 <Label htmlFor="newKeyName">Secret Name</Label>
@@ -173,9 +171,9 @@ export default function ApiKeyManager({ className }: { className?: string }) {
              </div>
               <Button onClick={handleAddNewKey} disabled={isLoadingNew || !newKeyName || !newKeyValue}>
                 {isLoadingNew ? (
-                  <Loader2 className="animate-spin" />
+                  <Loader2 className="animate-spin mr-2" />
                 ) : (
-                  <Plus />
+                  <Plus className="mr-2" />
                 )}
                 Add New Secret
               </Button>
