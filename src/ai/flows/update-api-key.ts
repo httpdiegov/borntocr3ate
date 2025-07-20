@@ -86,7 +86,7 @@ async function updateApiKeyInSecretManager(input: UpdateApiKeyInput): Promise<Up
     });
 
     console.log(`Added secret version ${version.name}`);
-    return { success: true, message: `Successfully updated ${secretName}.` };
+    return { success: true, message: `Successfully updated secret for ${secretName}.` };
   } catch (error: any) {
     console.error(`Failed to update secret ${secretName}:`, error);
     const errorMessage = error.details || error.message || 'An unknown error occurred.';
