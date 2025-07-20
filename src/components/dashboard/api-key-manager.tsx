@@ -41,7 +41,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { KeyRound, Plus, Trash2, Copy, Eye, EyeOff } from "lucide-react";
+import { KeyRound, Plus, Trash2, Copy, Eye, EyeOff, Pencil } from "lucide-react";
 
 type ApiKey = {
   id: string;
@@ -56,6 +56,7 @@ export default function ApiKeyManager({ className }: { className?: string }) {
   const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({});
   const { toast } = useToast();
   const [isDialogOpen, setDialogOpen] = useState(false);
+  const [editingKeyId, setEditingKeyId] = useState<string | null>(null);
   const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
@@ -77,23 +78,55 @@ export default function ApiKeyManager({ className }: { className?: string }) {
     }
   }, [keys, isMounted]);
 
-  const handleAddKey = () => {
-    if (service && keyValue) {
-      const newKey = { id: crypto.randomUUID(), service, key: keyValue };
-      const updatedKeys = [...keys, newKey];
-      setKeys(updatedKeys);
-      setService("");
-      setKeyValue("");
-      toast({ title: "API Key added successfully." });
-      setDialogOpen(false);
-    } else {
+  const handleSaveKey = () => {
+    if (!service || !keyValue) {
       toast({
         title: "Error",
         description: "Service name and key cannot be empty.",
         variant: "destructive",
       });
+      return;
     }
+
+    if (editingKeyId) {
+      // Editing existing key
+      const updatedKeys = keys.map((key) =>
+        key.id === editingKeyId ? { ...key, service, key: keyValue } : key
+      );
+      setKeys(updatedKeys);
+      toast({ title: "API Key updated successfully." });
+    } else {
+      // Adding new key
+      const newKey = { id: crypto.randomUUID(), service, key: keyValue };
+      const updatedKeys = [...keys, newKey];
+      setKeys(updatedKeys);
+      toast({ title: "API Key added successfully." });
+    }
+
+    closeDialog();
   };
+
+  const handleEditClick = (key: ApiKey) => {
+    setEditingKeyId(key.id);
+    setService(key.service);
+    setKeyValue(key.key);
+    setDialogOpen(true);
+  };
+  
+  const handleAddClick = () => {
+    setEditingKeyId(null);
+    setService("");
+    setKeyValue("");
+    setDialogOpen(true);
+  }
+
+  const closeDialog = () => {
+    setDialogOpen(false);
+    setEditingKeyId(null);
+    setService("");
+    setKeyValue("");
+  }
+
 
   const handleDeleteKey = (id: string) => {
     setKeys(keys.filter((key) => key.id !== id));
@@ -125,17 +158,17 @@ export default function ApiKeyManager({ className }: { className?: string }) {
             Store and manage your API keys securely in your browser.
           </CardDescription>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setDialogOpen}>
+        <Dialog open={isDialogOpen} onOpenChange={(isOpen) => { if (!isOpen) closeDialog(); else setDialogOpen(true)}}>
           <DialogTrigger asChild>
-            <Button size="sm">
+            <Button size="sm" onClick={handleAddClick}>
               <Plus className="h-4 w-4 mr-2" /> Add Key
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Add New API Key</DialogTitle>
+              <DialogTitle>{editingKeyId ? "Edit API Key" : "Add New API Key"}</DialogTitle>
               <DialogDescription>
-                Enter the service name and the API key. It will be stored in your browser's local storage.
+                {editingKeyId ? "Update the service name or API key." : "Enter the service name and the API key. It will be stored in your browser's local storage."}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
@@ -161,9 +194,9 @@ export default function ApiKeyManager({ className }: { className?: string }) {
             </div>
             <DialogFooter>
                 <DialogClose asChild>
-                    <Button variant="outline">Cancel</Button>
+                    <Button variant="outline" onClick={closeDialog}>Cancel</Button>
                 </DialogClose>
-                <Button onClick={handleAddKey}>Save Key</Button>
+                <Button onClick={handleSaveKey}>{editingKeyId ? "Save Changes" : "Save Key"}</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -185,11 +218,12 @@ export default function ApiKeyManager({ className }: { className?: string }) {
                   <TableCell className="font-mono">
                     {visibleKeys[apiKey.id] ? apiKey.key : "••••••••••••••••"}
                   </TableCell>
-                  <TableCell className="text-right space-x-2">
+                  <TableCell className="text-right space-x-1">
                     <Button
                       variant="ghost"
                       size="icon"
                       onClick={() => toggleVisibility(apiKey.id)}
+                      aria-label={visibleKeys[apiKey.id] ? "Hide key" : "Show key"}
                     >
                       {visibleKeys[apiKey.id] ? (
                         <EyeOff className="h-4 w-4" />
@@ -201,12 +235,21 @@ export default function ApiKeyManager({ className }: { className?: string }) {
                       variant="ghost"
                       size="icon"
                       onClick={() => copyToClipboard(apiKey.key)}
+                      aria-label="Copy key"
                     >
                       <Copy className="h-4 w-4" />
                     </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleEditClick(apiKey)}
+                      aria-label="Edit key"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="icon">
+                        <Button variant="ghost" size="icon" aria-label="Delete key">
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       </AlertDialogTrigger>
