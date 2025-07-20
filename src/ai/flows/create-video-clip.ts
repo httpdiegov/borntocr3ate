@@ -36,20 +36,18 @@ const CreateVideoClipOutputSchema = z.object({
 });
 export type CreateVideoClipOutput = z.infer<typeof CreateVideoClipOutputSchema>;
 
-// This function defines the logic for creating a video clip.
-// NOTE: This flow requires `ffmpeg` to be installed on the system where it's executed.
-// It will not work in a standard sandboxed cloud environment unless ffmpeg is included in the container.
-async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipOutput> {
-  const { videoUrl, startTime, endTime, speaker, clipTitle } = input;
-  
-  // Create temporary file path for the original download
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'clip-download-'));
-  const originalVideoPath = path.join(tempDir, 'original.mp4');
 
-  // Define the output directory and ensure it exists
+async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipOutput> {
+  const { videoUrl, startTime, endTime, clipTitle, speaker } = input;
+  let ffmpegCommand = 'Error: Command not generated.';
+
+  // Create a unique temporary directory for this operation
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'clip-processing-'));
+  const originalVideoPath = path.join(tempDir, 'original.mp4');
+  
+  // Define the final output directory and path
   const videosDir = path.join(process.cwd(), 'videos');
   fs.mkdirSync(videosDir, { recursive: true });
-  
   const safeClipTitle = clipTitle.replace(/[^a-zA-Z0-9_-]/g, '_');
   const outputClipPath = path.join(videosDir, `${safeClipTitle}.mp4`);
   
@@ -62,43 +60,32 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
     fs.writeFileSync(originalVideoPath, Buffer.from(videoBuffer));
     console.log(`Video downloaded to ${originalVideoPath}`);
 
-    // 2. Define ffmpeg crop parameters based on speaker position
+    // 2. Construct the ffmpeg command with improved static cropping
     const duration = endTime - startTime;
-    // For a 1920x1080 (16:9) video, we create a 1080x1920 (9:16) vertical video.
-    // The crop area width will be the original height times 9/16. (1080 * 9/16 = 607.5)
-    // The crop area height will be the original height. (1080)
-    // crop filter format is: crop=w:h:x:y
+    // Crop to 9:16 aspect ratio based on speaker position
     let cropFilter: string;
-    const cropWidth = "ih*9/16"; // output_width = input_height * (9/16)
-    const cropHeight = "ih";      // output_height = input_height
-
     switch (speaker.position) {
       case 'izquierda':
-        // Crop the left part of the video. 'x' is 0.
-        cropFilter = `crop=${cropWidth}:${cropHeight}:0:0`;
+        // Crop the left 56.25% of the video (9/16)
+        cropFilter = 'crop=ih*9/16:ih:0:0';
         break;
       case 'derecha':
-        // Crop the right part. 'x' is input_width - output_width.
-        cropFilter = `crop=${cropWidth}:${cropHeight}:iw-${cropWidth}:0`;
+        // Crop the right 56.25% of the video
+        cropFilter = 'crop=ih*9/16:ih:iw-ih*9/16:0';
         break;
       case 'centro':
       default:
-        // Crop the center. 'x' is (input_width - output_width) / 2.
-        cropFilter = `crop=${cropWidth}:${cropHeight}:(iw-${cropWidth})/2:0`;
+        // Crop the center
+        cropFilter = 'crop=ih*9/16:ih:(iw-ih*9/16)/2:0';
         break;
     }
-
-    // 3. Construct the ffmpeg command.
-    const ffmpegCommand = `ffmpeg -y -ss ${startTime} -i "${originalVideoPath}" -t ${duration} -vf "${cropFilter},scale=1080:1920" -c:a copy -preset ultrafast "${outputClipPath}"`;
+    
+    // Command to cut the clip, apply the crop, and scale to 1080x1920
+    ffmpegCommand = `ffmpeg -y -ss ${startTime} -i "${originalVideoPath}" -t ${duration} -vf "${cropFilter},scale=1080:1920" -c:a copy "${outputClipPath}"`;
     console.log(`Generated ffmpeg command: ${ffmpegCommand}`);
 
-    // 4. Execute the ffmpeg command
-    // THIS IS THE LINE THAT REQUIRES FFMPEG TO BE INSTALLED LOCALLY.
-    // It is commented out by default to prevent errors in environments without ffmpeg.
-    // To run locally: 1) Install ffmpeg on your system. 2) Uncomment the line below.
-    
+    // 3. Execute the ffmpeg command
     execSync(ffmpegCommand);
-    
 
     if (!fs.existsSync(outputClipPath)) {
         throw new Error("ffmpeg command did not produce an output file.");
@@ -114,9 +101,9 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
 
   } catch (error: any) {
     console.error('Failed to create video clip:', error);
-    return { success: false, message: `Failed to create clip: ${error.message}`, ffmpegCommand: 'Error generating command.' };
+    return { success: false, message: `Failed to create clip: ${error.message}`, ffmpegCommand };
   } finally {
-    // Clean up temporary downloaded file
+    // Clean up temporary directory
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 }
