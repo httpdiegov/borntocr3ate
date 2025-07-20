@@ -6,15 +6,16 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
-import { media } from 'genkit/ai';
+import { media } from 'genkit';
 
-// Define the schema for the input: a video file as a data URI
+// Define the schema for the input: a video file as a data URI and its content type
 const TranscribeVideoInputSchema = z.object({
   videoDataUri: z
     .string()
     .describe(
       "A video file, as a data URI that must include a MIME type and use Base64 encoding. Expected format: 'data:<mimetype>;base64,<encoded_data>'."
     ),
+  contentType: z.string().describe('The MIME type of the video file (e.g., "video/mp4").'),
 });
 export type TranscribeVideoInput = z.infer<typeof TranscribeVideoInputSchema>;
 
@@ -26,18 +27,22 @@ export type TranscribeVideoOutput = z.infer<
   typeof TranscribeVideoOutputSchema
 >;
 
+// Define the schema for the prompt's input, which now includes a structured media object
+const PromptInputSchema = z.object({
+    video: z.any().describe("The video content to be transcribed")
+});
+
+
 // Define the prompt that instructs the AI to transcribe the video.
-// We use a powerful model capable of video input.
 const transcriptionPrompt = ai.definePrompt({
   name: 'transcriptionPrompt',
-  input: { schema: TranscribeVideoInputSchema },
+  input: { schema: PromptInputSchema },
   output: { schema: TranscribeVideoOutputSchema },
   prompt: `Transcribe the audio from the following video accurately. Provide only the text of the transcription.
   
-  Video: {{media url=videoDataUri}}`,
+  Video: {{{video}}}`,
   
   // Use a model that supports video input like Gemini 1.5 Pro or Flash.
-  // Note: Video processing can take longer and be more expensive.
   model: 'googleai/gemini-1.5-flash', 
 });
 
@@ -51,9 +56,14 @@ export const transcribeVideo = ai.defineFlow(
   async (input) => {
     console.log('Starting video transcription...');
     
-    // Pass the input directly to the prompt.
-    // Genkit's prompt templating will handle the media object creation.
-    const { output } = await transcriptionPrompt(input);
+    // Manually create the MediaPart object. This is the correct way.
+    const videoPart = media({
+        url: input.videoDataUri,
+        contentType: input.contentType,
+    });
+
+    // Pass the structured object to the prompt.
+    const { output } = await transcriptionPrompt({ video: videoPart });
     
     if (!output?.transcription) {
         console.error("Transcription failed. AI did not return valid text.");
