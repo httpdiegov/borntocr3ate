@@ -30,7 +30,7 @@ export type GetYoutubeStatsOutput = z.infer<typeof GetYoutubeStatsOutputSchema>;
 async function fetchChannelData(input: GetYoutubeStatsInput): Promise<GetYoutubeStatsOutput> {
   const apiKey = await getApiKey({ service: 'youtube_api_key' });
   if (!apiKey) {
-    throw new Error('YouTube API key not found in environment variables.');
+    throw new Error('YouTube API key not found. Please ensure it is set correctly in Secret Manager.');
   }
 
   const handle = input.channelHandle.startsWith('@') ? input.channelHandle.substring(1) : input.channelHandle;
