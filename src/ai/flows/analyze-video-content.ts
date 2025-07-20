@@ -4,7 +4,8 @@
  * @fileOverview Un flujo de IA para analizar el contenido de un video y extraer clips virales.
  */
 
-import { ai } from '@/ai/genkit';
+import { genkit } from 'genkit';
+import { googleAI } from '@genkit-ai/googleai';
 import { z } from 'zod';
 import { getApiKey } from '../tools/get-api-key';
 
@@ -31,8 +32,6 @@ const AnalyzeVideoOutputSchema = z.object({
 });
 export type AnalyzeVideoOutput = z.infer<typeof AnalyzeVideoOutputSchema>;
 
-// This is now a regular async function, not a Genkit Flow.
-// This avoids initialization issues with the Genkit runner.
 export async function analyzeVideoContent(input: AnalyzeVideoInput): Promise<AnalyzeVideoOutput> {
   console.log("Analizando transcripción para encontrar clips...");
 
@@ -41,7 +40,12 @@ export async function analyzeVideoContent(input: AnalyzeVideoInput): Promise<Ana
     throw new Error('Gemini API key not found in Secret Manager.');
   }
   
-  const { output } = await ai.generate({
+  // Create a local, just-in-time configured Genkit instance
+  const localAi = genkit({
+    plugins: [googleAI({ apiKey })],
+  });
+  
+  const { output } = await localAi.generate({
     model: 'googleai/gemini-1.5-flash',
     prompt: `Eres un experto en redes sociales y edición de video, especializado en identificar momentos virales en contenido largo.
   
@@ -69,9 +73,6 @@ export async function analyzeVideoContent(input: AnalyzeVideoInput): Promise<Ana
     output: {
       schema: AnalyzeVideoOutputSchema,
     },
-    config: {
-      apiKey: apiKey,
-    }
   });
 
   if (!output || !Array.isArray(output.clips) || output.clips.length === 0) {

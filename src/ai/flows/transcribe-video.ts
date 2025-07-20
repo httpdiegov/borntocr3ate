@@ -5,7 +5,8 @@
  */
 
 import { z } from 'zod';
-import { ai } from '@/ai/genkit';
+import { genkit } from 'genkit';
+import { googleAI } from '@genkit-ai/googleai';
 import { getApiKey } from '../tools/get-api-key';
 
 // Define the schema for the input: a video file as a data URI and its content type
@@ -27,8 +28,6 @@ export type TranscribeVideoOutput = z.infer<
   typeof TranscribeVideoOutputSchema
 >;
 
-// This is now a regular async function, not a Genkit Flow.
-// This avoids initialization issues with the Genkit runner.
 export async function transcribeVideo(input: TranscribeVideoInput): Promise<TranscribeVideoOutput> {
     console.log('Starting video transcription with Gemini 1.5 Flash...');
     
@@ -36,9 +35,14 @@ export async function transcribeVideo(input: TranscribeVideoInput): Promise<Tran
     if (!apiKey) {
       throw new Error('Gemini API key not found in Secret Manager.');
     }
+    
+    // Create a local, just-in-time configured Genkit instance
+    const localAi = genkit({
+        plugins: [googleAI({apiKey})],
+    });
 
     // Use the core generate function for more direct control.
-    const { output } = await ai.generate({
+    const { output } = await localAi.generate({
         model: 'googleai/gemini-1.5-flash',
         prompt: {
             text: 'Transcribe the audio from the following video accurately. Provide only the text of the transcription.',
@@ -50,9 +54,6 @@ export async function transcribeVideo(input: TranscribeVideoInput): Promise<Tran
         output: {
             schema: TranscribeVideoOutputSchema
         },
-        config: {
-            apiKey: apiKey,
-        }
     });
     
     if (!output?.transcription) {
