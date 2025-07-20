@@ -149,19 +149,9 @@ const InstagramStats: React.FC<{ handle: string }> = ({ handle }) => {
             setError(null);
             setStats(null);
             try {
-                let accessToken: string | undefined;
-                const storedKeys = localStorage.getItem("apiKeys");
-                if (storedKeys) {
-                    const keys: ApiKey[] = JSON.parse(storedKeys);
-                    accessToken = keys.find(k => k.service === 'instagram_access_token')?.key;
-                }
-
-                if (!accessToken) {
-                    throw new Error("Instagram Access Token not found. Please add it in the API Key Manager with the service name 'instagram_access_token'.");
-                }
-                const result = await getInstagramStats({ accessToken });
+                // We no longer need a real API call, just get mock data.
+                const result = await getInstagramStats({});
                 setStats(result);
-
             } catch (e: any) {
                 setError(e.message || "Failed to fetch Instagram stats.");
             } finally {
