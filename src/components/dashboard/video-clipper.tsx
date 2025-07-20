@@ -67,8 +67,7 @@ export default function VideoClipper({ className }: { className?: string }) {
     try {
         const videoDataUri = await fileToDataUri(videoFile);
         const result = await transcribeVideo({ 
-          videoDataUri: videoDataUri, 
-          contentType: videoFile.type 
+          videoDataUri: videoDataUri,
         });
         setTranscription(result.transcription);
         toast({ title: "¡Transcripción completada!", description: "Ahora puedes analizar el texto para encontrar clips."});

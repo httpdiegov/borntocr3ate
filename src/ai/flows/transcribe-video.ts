@@ -8,14 +8,13 @@ import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 import { media } from 'genkit/ai';
 
-// Define the schema for the input: a video file as a data URI and its content type
+// Define the schema for the input: a video file as a data URI
 const TranscribeVideoInputSchema = z.object({
   videoDataUri: z
     .string()
     .describe(
       "A video file, as a data URI that must include a MIME type and use Base64 encoding. Expected format: 'data:<mimetype>;base64,<encoded_data>'."
     ),
-   contentType: z.string().describe('The MIME type of the video file (e.g., "video/mp4").'),
 });
 export type TranscribeVideoInput = z.infer<typeof TranscribeVideoInputSchema>;
 
@@ -35,7 +34,7 @@ const transcriptionPrompt = ai.definePrompt({
   output: { schema: TranscribeVideoOutputSchema },
   prompt: `Transcribe the audio from the following video accurately. Provide only the text of the transcription.
   
-  Video: {{media url=videoDataUri contentType=contentType}}`,
+  Video: {{media url=videoDataUri}}`,
   
   // Use a model that supports video input like Gemini 1.5 Pro or Flash.
   // Note: Video processing can take longer and be more expensive.
