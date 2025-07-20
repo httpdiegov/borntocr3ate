@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { KeyRound, Save, Loader2, Plus } from "lucide-react";
+import { KeyRound, Save, Loader2, Plus, Eye, EyeOff } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { updateApiKey } from "@/ai/flows/update-api-key";
 import { Separator } from "@/components/ui/separator";
@@ -29,10 +29,15 @@ export default function ApiKeyManager({ className }: { className?: string }) {
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
   const [newKeyName, setNewKeyName] = useState("");
   const [newKeyValue, setNewKeyValue] = useState("");
+  const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({});
   const { toast } = useToast();
 
   const handleInputChange = (key: string, value: string) => {
     setKeyValues((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const toggleVisibility = (key: string) => {
+    setVisibleKeys((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
   const handleSaveKey = async (key: string, name: string) => {
@@ -107,7 +112,6 @@ export default function ApiKeyManager({ className }: { className?: string }) {
 
   const isLoadingNew = loadingKey === 'new_key';
 
-
   return (
     <Card className={className}>
       <CardHeader>
@@ -126,12 +130,16 @@ export default function ApiKeyManager({ className }: { className?: string }) {
             <div className="flex items-center gap-2">
               <Input
                 id={key}
-                type="password"
-                placeholder={`Enter new ${name}`}
+                type={visibleKeys[key] ? "text" : "password"}
+                placeholder="••••••••••••"
                 value={keyValues[key] || ""}
                 onChange={(e) => handleInputChange(key, e.target.value)}
                 disabled={!!loadingKey}
               />
+              <Button variant="ghost" size="icon" onClick={() => toggleVisibility(key)} disabled={!!loadingKey}>
+                {visibleKeys[key] ? <EyeOff /> : <Eye />}
+                <span className="sr-only">{visibleKeys[key] ? 'Hide' : 'Show'} key</span>
+              </Button>
               <Button onClick={() => handleSaveKey(key, name)} disabled={loadingKey === key || !keyValues[key]} size="icon">
                 {loadingKey === key ? (
                   <Loader2 className="animate-spin" />
@@ -160,14 +168,20 @@ export default function ApiKeyManager({ className }: { className?: string }) {
              </div>
              <div className="space-y-2">
                 <Label htmlFor="newKeyValue">Secret Value</Label>
-                 <Input
-                    id="newKeyValue"
-                    type="password"
-                    placeholder="Enter the secret value"
-                    value={newKeyValue}
-                    onChange={(e) => setNewKeyValue(e.target.value)}
-                    disabled={isLoadingNew}
-                 />
+                 <div className="flex items-center gap-2">
+                   <Input
+                      id="newKeyValue"
+                      type={visibleKeys['new_key'] ? 'text' : 'password'}
+                      placeholder="Enter the secret value"
+                      value={newKeyValue}
+                      onChange={(e) => setNewKeyValue(e.target.value)}
+                      disabled={isLoadingNew}
+                   />
+                    <Button variant="ghost" size="icon" onClick={() => toggleVisibility('new_key')} disabled={isLoadingNew}>
+                      {visibleKeys['new_key'] ? <EyeOff /> : <Eye />}
+                      <span className="sr-only">Toggle new key visibility</span>
+                    </Button>
+                 </div>
              </div>
               <Button onClick={handleAddNewKey} disabled={isLoadingNew || !newKeyName || !newKeyValue}>
                 {isLoadingNew ? (
