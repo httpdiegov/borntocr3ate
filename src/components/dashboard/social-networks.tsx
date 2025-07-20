@@ -263,6 +263,14 @@ const socialAccounts: SocialAccount[] = [
     statsComponent: InstagramStats,
     businessIdKey: "instagram_business_account_id",
   },
+  {
+    platform: "Instagram",
+    handle: "google",
+    href: "https://www.instagram.com/google",
+    icon: <InstagramIcon className="h-6 w-6" />,
+    statsComponent: InstagramStats,
+    businessIdKey: "instagram_business_account_id",
+  },
 ];
 
 export default function SocialNetworks({ className }: { className?: string }) {
