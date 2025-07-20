@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -63,24 +64,27 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
 
     // 2. Define ffmpeg crop parameters based on speaker position
     const duration = endTime - startTime;
-    // For a 1920x1080 video, we create a 1080x1920 crop.
-    // The crop area will be 1/3 of the width of the original video.
-    // We assume the original video is 1920px wide for this logic.
-    // Crop arguments for ffmpeg are: crop=width:height:x:y
+    // For a 1920x1080 (16:9) video, we create a 9:16 vertical video.
+    // The crop area width will be the original height times 9/16.
+    // The crop area height will be the original height.
+    // crop filter format is: crop=w:h:x:y
     let cropFilter: string;
+    const cropWidth = "ih*9/16"; // output_width = input_height * (9/16)
+    const cropHeight = "ih";      // output_height = input_height
+
     switch (speaker.position) {
       case 'izquierda':
-        // Crop the left third of the video
-        cropFilter = 'crop=ih*9/16:ih:0:0'; 
+        // x=0 to align to the left edge
+        cropFilter = `crop=${cropWidth}:${cropHeight}:0:0`;
         break;
       case 'derecha':
-        // Crop the right third of the video. x = iw - (width of crop)
-        cropFilter = 'crop=ih*9/16:ih:iw-ih*9/16:0';
+        // x = iw - ow (input_width - output_width) to align to the right edge
+        cropFilter = `crop=${cropWidth}:${cropHeight}:iw-${cropWidth}:0`;
         break;
       case 'centro':
       default:
-        // Crop the center third of the video
-        cropFilter = 'crop=ih*9/16:ih:(iw-ih*9/16)/2:0';
+        // x = (iw - ow) / 2 to center the crop
+        cropFilter = `crop=${cropWidth}:${cropHeight}:(iw-${cropWidth})/2:0`;
         break;
     }
 
@@ -93,16 +97,16 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
     // It is commented out by default to prevent errors in environments without ffmpeg.
     // To run locally: 1) Install ffmpeg on your system. 2) Uncomment the line below.
     
-    // execSync(ffmpegCommand);
+    execSync(ffmpegCommand);
     
     // --- MOCK RESPONSE (if execSync is commented out) ---
     // To allow the UI to be tested without ffmpeg, we'll simulate a successful response.
     // When you uncomment execSync, you should comment out or remove this block.
-    await new Promise(resolve => setTimeout(resolve, 3000)); // Simulate processing time
-    if (!fs.existsSync(outputClipPath)) {
-        // Create a placeholder file for demonstration if it doesn't exist
-        fs.writeFileSync(outputClipPath, "mock video content"); 
-    }
+    // await new Promise(resolve => setTimeout(resolve, 3000)); // Simulate processing time
+    // if (!fs.existsSync(outputClipPath)) {
+    //     // Create a placeholder file for demonstration if it doesn't exist
+    //     fs.writeFileSync(outputClipPath, "mock video content"); 
+    // }
     // --- END MOCK RESPONSE ---
 
     if (!fs.existsSync(outputClipPath)) {
