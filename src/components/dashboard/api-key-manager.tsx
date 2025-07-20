@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Card,
   CardContent,
@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { KeyRound, Save, Loader2, Plus, Eye, EyeOff } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { updateApiKey } from "@/ai/flows/update-api-key";
+import { areApiKeysSet } from "@/ai/flows/are-api-keys-set";
 import { Separator } from "@/components/ui/separator";
 
 const predefinedApiKeys: { name: string; key: string }[] = [
@@ -30,7 +31,31 @@ export default function ApiKeyManager({ className }: { className?: string }) {
   const [newKeyName, setNewKeyName] = useState("");
   const [newKeyValue, setNewKeyValue] = useState("");
   const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({});
+  const [setKeys, setSetKeys] = useState<string[]>([]);
+  const [checkingKeys, setCheckingKeys] = useState(true);
   const { toast } = useToast();
+
+  useEffect(() => {
+    async function checkKeys() {
+      setCheckingKeys(true);
+      try {
+        const keyNames = predefinedApiKeys.map(k => k.key);
+        const result = await areApiKeysSet({ services: keyNames });
+        setSetKeys(result.setKeys);
+      } catch (error) {
+        console.error("Failed to check API key status:", error);
+        toast({
+          title: "Could not check key status",
+          description: "There was an error checking the status of the API keys.",
+          variant: "destructive"
+        });
+      } finally {
+        setCheckingKeys(false);
+      }
+    }
+    checkKeys();
+  }, [toast]);
+
 
   const handleInputChange = (key: string, value: string) => {
     setKeyValues((prev) => ({ ...prev, [key]: value }));
@@ -60,6 +85,9 @@ export default function ApiKeyManager({ className }: { className?: string }) {
           description: result.message || `${name} has been updated.`,
         });
         setKeyValues((prev) => ({...prev, [key]: ''})); // Clear input on success
+        if (!setKeys.includes(key)) {
+            setSetKeys([...setKeys, key]); // Mark key as set
+        }
       } else {
          throw new Error(result.message || 'An unknown error occurred.');
       }
@@ -85,15 +113,15 @@ export default function ApiKeyManager({ className }: { className?: string }) {
       return;
     }
 
-    setLoadingKey('new_key'); // Set a generic loading state for the new key form
+    setLoadingKey('new_key');
     try {
       const result = await updateApiKey({ service: newKeyName.trim(), value: newKeyValue.trim() });
       if (result.success) {
         toast({
           title: "Success",
-          description: `New secret '${newKeyName.trim()}' has been saved.`,
+          description: `New secret '${newKeyName.trim()}' has been saved. You might need to refresh the page to see it in a predefined list.`,
         });
-        setNewKeyName(""); // Clear inputs on success
+        setNewKeyName(""); 
         setNewKeyValue("");
       } else {
          throw new Error(result.message || 'An unknown error occurred.');
@@ -124,33 +152,40 @@ export default function ApiKeyManager({ className }: { className?: string }) {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        {predefinedApiKeys.map(({ name, key }) => (
-          <div key={key} className="space-y-2">
-            <Label htmlFor={key}>{name}</Label>
-            <div className="flex items-center gap-2">
-              <Input
-                id={key}
-                type={visibleKeys[key] ? "text" : "password"}
-                placeholder="••••••••••••"
-                value={keyValues[key] || ""}
-                onChange={(e) => handleInputChange(key, e.target.value)}
-                disabled={!!loadingKey}
-              />
-              <Button variant="ghost" size="icon" onClick={() => toggleVisibility(key)} disabled={!!loadingKey}>
-                {visibleKeys[key] ? <EyeOff /> : <Eye />}
-                <span className="sr-only">{visibleKeys[key] ? 'Hide' : 'Show'} key</span>
-              </Button>
-              <Button onClick={() => handleSaveKey(key, name)} disabled={loadingKey === key || !keyValues[key]} size="icon">
-                {loadingKey === key ? (
-                  <Loader2 className="animate-spin" />
-                ) : (
-                  <Save />
-                )}
-                <span className="sr-only">Save {name}</span>
-              </Button>
-            </div>
+        {checkingKeys ? (
+          <div className="flex items-center justify-center text-muted-foreground">
+            <Loader2 className="animate-spin mr-2" />
+            <span>Checking key status...</span>
           </div>
-        ))}
+        ) : (
+          predefinedApiKeys.map(({ name, key }) => (
+            <div key={key} className="space-y-2">
+              <Label htmlFor={key}>{name}</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id={key}
+                  type={visibleKeys[key] ? "text" : "password"}
+                  placeholder={setKeys.includes(key) ? "••••••••••••" : "Not set"}
+                  value={keyValues[key] || ""}
+                  onChange={(e) => handleInputChange(key, e.target.value)}
+                  disabled={!!loadingKey}
+                />
+                <Button variant="ghost" size="icon" onClick={() => toggleVisibility(key)} disabled={!!loadingKey}>
+                  {visibleKeys[key] ? <EyeOff /> : <Eye />}
+                  <span className="sr-only">{visibleKeys[key] ? 'Hide' : 'Show'} key</span>
+                </Button>
+                <Button onClick={() => handleSaveKey(key, name)} disabled={loadingKey === key || !keyValues[key]} size="icon">
+                  {loadingKey === key ? (
+                    <Loader2 className="animate-spin" />
+                  ) : (
+                    <Save />
+                  )}
+                  <span className="sr-only">Save {name}</span>
+                </Button>
+              </div>
+            </div>
+          ))
+        )}
       </CardContent>
       <CardFooter className="flex-col items-start gap-4 pt-6">
           <Separator />
