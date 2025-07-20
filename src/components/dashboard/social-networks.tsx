@@ -217,7 +217,7 @@ const InstagramStats: React.FC<{ handle: string, businessIdKey?: string }> = ({ 
         return (
             <div className="flex flex-col items-center w-full">
                 <Image
-                  src={stats.profilePicUrl}
+                  src={stats.profilePicUrl || 'https://placehold.co/80x80.png'}
                   data-ai-hint="logo"
                   alt={`${stats.username} profile picture`}
                   width={80}

@@ -22,7 +22,7 @@ const GetInstagramBusinessStatsOutputSchema = z.object({
   username: z.string().describe('The username of the account.'),
   mediaCount: z.number().describe('The number of media objects on the account.'),
   followersCount: z.number().describe('The number of followers.'),
-  profilePicUrl: z.string().describe('The URL of the profile picture.'),
+  profilePicUrl: z.string().optional().describe('The URL of the profile picture.'),
 });
 export type GetInstagramBusinessStatsOutput = z.infer<typeof GetInstagramBusinessStatsOutputSchema>;
 
