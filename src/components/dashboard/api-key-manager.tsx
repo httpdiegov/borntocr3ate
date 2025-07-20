@@ -212,7 +212,7 @@ export default function ApiKeyManager({ className }: { className?: string }) {
               return (
                 <div key={key} className="space-y-2">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <Label htmlFor={key} className="flex-1">{name}</Label>
+                    <Label htmlFor={key} className="flex-1 font-semibold">{name}</Label>
                     {info?.tags?.map(tag => (
                       <Badge key={tag} variant="secondary">{tag}</Badge>
                     ))}
