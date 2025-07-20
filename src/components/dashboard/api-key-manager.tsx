@@ -69,9 +69,10 @@ export default function ApiKeyManager({ className }: { className?: string }) {
 
   const handleEdit = (key: string) => {
     setEditingKey(key);
-    setKeyValues((prev) => ({ ...prev, [key]: '' })); // Clear value on edit
+    // When editing, clear the current input value for that key
+    setKeyValues((prev) => ({ ...prev, [key]: '' }));
   };
-
+  
   const handleCancelEdit = () => {
     setEditingKey(null);
   };
@@ -176,8 +177,10 @@ export default function ApiKeyManager({ className }: { className?: string }) {
               const isSet = setKeys.includes(key);
               const isEditing = editingKey === key;
               const isLoading = loadingKey === key;
-              const isReadOnly = !isEditing && isSet;
               const isVisible = visibleKeys[key];
+              
+              // The input is readonly if it's set AND we are NOT editing it.
+              const isReadOnly = isSet && !isEditing;
 
               return (
                 <div key={key} className="space-y-2">
@@ -185,22 +188,21 @@ export default function ApiKeyManager({ className }: { className?: string }) {
                   <div className="flex items-center gap-2">
                     <Input
                       id={key}
-                      type={isEditing && isVisible ? "text" : "password"}
-                      placeholder={isSet && !isEditing ? "" : "Enter key value..."}
+                      type={isVisible ? "text" : "password"}
+                      placeholder={isEditing ? "Enter new key value..." : ""}
                       value={isReadOnly ? "••••••••••••••••" : (keyValues[key] || "")}
                       onChange={(e) => handleInputChange(key, e.target.value)}
                       readOnly={isReadOnly}
                       className={isReadOnly ? "cursor-default focus-visible:ring-0" : ""}
                       disabled={isLoading}
                     />
-                    {isEditing && (
-                      <Button variant="ghost" size="icon" onClick={() => toggleVisibility(key)} disabled={isLoading}>
-                        {isVisible ? <EyeOff /> : <Eye />}
-                        <span className="sr-only">
-                          {isVisible ? 'Hide' : 'Show'} key while editing
-                        </span>
-                      </Button>
-                    )}
+                    
+                    <Button variant="ghost" size="icon" onClick={() => toggleVisibility(key)} disabled={isLoading || isReadOnly}>
+                      {isVisible ? <EyeOff /> : <Eye />}
+                      <span className="sr-only">
+                        {isVisible ? 'Hide' : 'Show'} key
+                      </span>
+                    </Button>
                     
                     {isEditing ? (
                       <>
@@ -271,3 +273,5 @@ export default function ApiKeyManager({ className }: { className?: string }) {
     </Card>
   );
 }
+
+    
