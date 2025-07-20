@@ -27,6 +27,7 @@ export type TranscribeVideoOutput = z.infer<
 >;
 
 // Define the prompt that instructs the AI to transcribe the video.
+// The key is to pass both url and contentType to the media helper.
 const transcriptionPrompt = ai.definePrompt({
   name: 'transcriptionPrompt',
   input: { schema: TranscribeVideoInputSchema },
