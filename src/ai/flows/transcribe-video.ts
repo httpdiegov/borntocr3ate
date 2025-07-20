@@ -27,7 +27,7 @@ export type TranscribeVideoOutput = z.infer<
 
 /**
  * Transcribes a video using the Gemini API.
- * This function bypasses prompt templating to directly control the multimodal request.
+ * This function uses a direct ai.generate call to correctly handle multimodal input.
  * @param input The video data to transcribe.
  * @returns The transcription text.
  */
@@ -36,10 +36,8 @@ export async function transcribeVideo(input: TranscribeVideoInput): Promise<Tran
   
   const { output } = await ai.generate({
       model: 'googleai/gemini-1.5-flash',
-      prompt: [
-        { text: 'Transcribe the audio from the following video accurately. Provide only the text of the transcription.' },
-        { media: { url: input.videoDataUri, contentType: input.contentType } }
-      ],
+      prompt: 'Transcribe the audio from the following video accurately. Provide only the text of the transcription.',
+      media: [{ url: input.videoDataUri, contentType: input.contentType }],
       output: {
         schema: TranscribeVideoOutputSchema,
       },
