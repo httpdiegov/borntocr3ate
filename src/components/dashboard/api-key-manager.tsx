@@ -27,7 +27,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { KeyRound, Save, Loader2, Plus, Eye, EyeOff, ChevronDown } from "lucide-react";
+import { KeyRound, Save, Loader2, Plus, Eye, EyeOff, ChevronDown, Filter } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { updateApiKey } from "@/ai/flows/update-api-key";
 import { getApiKeys } from "@/ai/flows/get-api-keys";
@@ -58,6 +58,7 @@ export default function ApiKeyManager({ className }: { className?: string }) {
   const [newKeyTags, setNewKeyTags] = useState<string[]>([]);
   const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({});
   const [checkingKeys, setCheckingKeys] = useState(true);
+  const [filterTag, setFilterTag] = useState("");
   const { toast } = useToast();
 
   useEffect(() => {
@@ -182,6 +183,11 @@ export default function ApiKeyManager({ className }: { className?: string }) {
 
   const isLoadingNew = loadingKey === 'new_key';
 
+  const filteredKeys = predefinedApiKeys.filter(key => {
+    if (filterTag === "") return true;
+    return key.tags.includes(filterTag);
+  });
+
   return (
     <Card className={className}>
       <CardHeader>
@@ -201,8 +207,20 @@ export default function ApiKeyManager({ className }: { className?: string }) {
           </div>
         ) : (
           <div className="space-y-4">
-             <h3 className="text-lg font-medium">Predefined Secrets</h3>
-            {predefinedApiKeys.map(({ name, key, tags }) => {
+             <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                <h3 className="text-lg font-medium">Predefined Secrets</h3>
+                <div className="flex items-center gap-2">
+                    <Button variant={filterTag === "" ? "default" : "outline"} size="sm" onClick={() => setFilterTag("")}>
+                        All
+                    </Button>
+                    {availableTags.filter(t => t !== 'Otro').map(tag => (
+                        <Button key={tag} variant={filterTag === tag ? "default" : "outline"} size="sm" onClick={() => setFilterTag(tag)}>
+                            {tag}
+                        </Button>
+                    ))}
+                </div>
+             </div>
+            {filteredKeys.map(({ name, key, tags }) => {
               const isLoading = loadingKey === key;
               const isVisible = visibleKeys[key];
               const info = keyInfo[key];
@@ -242,6 +260,11 @@ export default function ApiKeyManager({ className }: { className?: string }) {
                 </div>
               )
             })}
+             {filteredKeys.length === 0 && (
+                <div className="text-center text-muted-foreground py-8">
+                    <p>No secrets match the filter "{filterTag}".</p>
+                </div>
+            )}
           </div>
         )}
       </CardContent>
