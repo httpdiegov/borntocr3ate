@@ -11,12 +11,29 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Film, Bot, Loader2, Scissors, Download } from "lucide-react";
+import { Film, Bot, Loader2, Scissors, WholeWord } from "lucide-react";
+import { transcribeVideo } from "@/ai/flows/transcribe-video";
 import { analyzeVideoContent, type AnalyzedClip } from "@/ai/flows/analyze-video-content";
 import { Badge } from "../ui/badge";
+import { Textarea } from "../ui/textarea";
+
+// Helper to convert a File to a Base64 Data URI
+const fileToDataUri = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        resolve(reader.result as string);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+};
+
 
 export default function VideoClipper({ className }: { className?: string }) {
   const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [transcription, setTranscription] = useState<string | null>(null);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [clips, setClips] = useState<AnalyzedClip[]>([]);
   const { toast } = useToast();
@@ -27,6 +44,7 @@ export default function VideoClipper({ className }: { className?: string }) {
       if (file.type.startsWith("video/")) {
         setVideoFile(file);
         setClips([]);
+        setTranscription(null);
         toast({ title: "Video cargado", description: file.name });
       } else {
         toast({
@@ -37,12 +55,38 @@ export default function VideoClipper({ className }: { className?: string }) {
       }
     }
   };
+  
+  const handleTranscribe = async () => {
+    if (!videoFile) return;
+
+    setIsTranscribing(true);
+    setTranscription(null);
+    setClips([]);
+    toast({ title: "Iniciando transcripción...", description: "La IA está procesando el video. Esto puede tardar unos minutos." });
+
+    try {
+        const videoDataUri = await fileToDataUri(videoFile);
+        const result = await transcribeVideo({ videoDataUri });
+        setTranscription(result.transcription);
+        toast({ title: "¡Transcripción completada!", description: "Ahora puedes analizar el texto para encontrar clips."});
+    } catch (error) {
+        console.error("Error transcribing video:", error);
+        toast({
+          title: "Error en la transcripción",
+          description: "No se pudo transcribir el video. Revisa la consola para más detalles.",
+          variant: "destructive",
+        });
+    } finally {
+        setIsTranscribing(false);
+    }
+  }
+
 
   const handleAnalyze = async () => {
-    if (!videoFile) {
+    if (!transcription) {
       toast({
-        title: "No hay video",
-        description: "Por favor, carga un video primero.",
+        title: "No hay transcripción",
+        description: "Por favor, transcribe el video primero.",
         variant: "destructive",
       });
       return;
@@ -52,11 +96,7 @@ export default function VideoClipper({ className }: { className?: string }) {
     setClips([]);
 
     try {
-      // En una implementación real, aquí leerías el audio, lo transcribirías,
-      // y pasarías la transcripción al flujo.
-      // Por ahora, pasamos un texto simulado.
-      const fakeTranscription = "Este es el texto simulado de un video largo donde se discuten temas de IA, se habla de Opus Clip y vizard.ai y se pregunta cómo recrearlo. Este es el primer clip viral. Luego, se explican los desafíos técnicos del procesamiento de video. Finalmente, se propone una solución con Python y n8n, este es el segundo momento clave.";
-      const result = await analyzeVideoContent({ transcription: fakeTranscription });
+      const result = await analyzeVideoContent({ transcription });
       
       setClips(result.clips);
       toast({
@@ -75,6 +115,8 @@ export default function VideoClipper({ className }: { className?: string }) {
       setIsAnalyzing(false);
     }
   };
+  
+  const isLoading = isTranscribing || isAnalyzing;
 
   return (
     <Card className={`${className} flex flex-col`}>
@@ -84,29 +126,46 @@ export default function VideoClipper({ className }: { className?: string }) {
           Video Clipper
         </CardTitle>
         <CardDescription>
-          Sube un video y la IA encontrará los momentos clave para crear clips cortos.
+          Sube un video, la IA lo transcribirá y encontrará los momentos clave para crear clips.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex-grow space-y-4">
         <div className="space-y-2">
-          <Input type="file" accept="video/*" onChange={handleFileChange} disabled={isAnalyzing} />
-          <Button onClick={handleAnalyze} className="w-full" disabled={!videoFile || isAnalyzing}>
-            {isAnalyzing ? (
-              <Loader2 className="animate-spin mr-2" />
-            ) : (
-              <Bot className="mr-2" />
-            )}
-            {isAnalyzing ? "Analizando..." : "Encontrar Clips Virales"}
-          </Button>
+          <Input type="file" accept="video/*" onChange={handleFileChange} disabled={isLoading} />
+          <div className="grid grid-cols-2 gap-2">
+            <Button onClick={handleTranscribe} className="w-full" disabled={!videoFile || isLoading}>
+                {isTranscribing ? <Loader2 className="animate-spin mr-2" /> : <WholeWord className="mr-2" />}
+                {isTranscribing ? "Transcribiendo..." : "1. Transcribir"}
+            </Button>
+            <Button onClick={handleAnalyze} className="w-full" disabled={!transcription || isLoading}>
+                {isAnalyzing ? <Loader2 className="animate-spin mr-2" /> : <Bot className="mr-2" />}
+                {isAnalyzing ? "Analizando..." : "2. Encontrar Clips"}
+            </Button>
+          </div>
         </div>
         
         <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
-          {isAnalyzing && (
+          {isLoading && (
              <div className="text-center text-muted-foreground py-12">
                 <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
-                <p>La IA está analizando el contenido...</p>
+                <p>
+                    {isTranscribing ? "Transcribiendo video... Esto puede tardar." : "La IA está analizando el contenido..."}
+                </p>
               </div>
           )}
+
+          {transcription && !isTranscribing && (
+            <div>
+              <h3 className="font-semibold mb-2">Transcripción del Video:</h3>
+              <Textarea 
+                readOnly 
+                value={transcription} 
+                className="h-32 bg-muted/50"
+                placeholder="Aquí aparecerá la transcripción..."
+              />
+            </div>
+          )}
+
           {clips.length > 0 ? (
             clips.map((clip) => (
               <Card key={clip.id} className="bg-card/50">
@@ -130,7 +189,7 @@ export default function VideoClipper({ className }: { className?: string }) {
               </Card>
             ))
           ) : (
-            !isAnalyzing && (
+            !isLoading && !transcription && (
                 <div className="text-center text-muted-foreground py-12">
                     <p>Carga un video para empezar.</p>
                 </div>
