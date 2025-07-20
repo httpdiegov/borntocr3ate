@@ -68,7 +68,8 @@ export async function analyzeVideoContent(input: AnalyzeVideoInput): Promise<Ana
     contents: [{ parts: [{ text: prompt }] }],
     generationConfig: {
       response_mime_type: "application/json",
-      response_schema: AnalyzeVideoOutputSchema,
+      // The API requires the schema to be an object, not the Zod instance itself.
+      response_schema: AnalyzeVideoOutputSchema.describe(), 
     },
   };
   

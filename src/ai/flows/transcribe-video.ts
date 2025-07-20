@@ -35,9 +35,13 @@ export async function transcribeVideo(input: TranscribeVideoInput): Promise<Tran
     }
 
     // The API expects the base64 data without the data URI prefix.
-    const base64Data = input.videoDataUri.split(',')[1];
+    // This robustly handles both cases: with or without the prefix.
+    const base64Data = input.videoDataUri.includes(',') 
+      ? input.videoDataUri.split(',')[1] 
+      : input.videoDataUri;
+      
     if (!base64Data) {
-      throw new Error('Invalid data URI format.');
+      throw new Error('Invalid data URI: could not extract Base64 data.');
     }
     
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
@@ -75,12 +79,12 @@ export async function transcribeVideo(input: TranscribeVideoInput): Promise<Tran
 
         const data = await response.json();
 
-        if (!data.candidates || !data.candidates[0].content || !data.candidates[0].content.parts[0].text) {
+        const transcription = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+        if (typeof transcription !== 'string') {
              console.error("Transcription failed. Invalid response structure from API:", data);
              throw new Error("La IA no pudo generar una transcripción. Respuesta inesperada.");
         }
-
-        const transcription = data.candidates[0].content.parts[0].text;
         
         console.log('Transcription completed successfully.');
         return { transcription };
