@@ -35,11 +35,11 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 
 
-const predefinedApiKeys: { name: string; key: string }[] = [
-  { name: "Gemini API Key", key: "GEMINI_API_KEY" },
-  { name: "YouTube API Key", key: "youtube_api_key" },
-  { name: "Instagram Access Token", key: "instagram_access_token" },
-  { name: "Instagram Business Account ID", key: "instagram_business_account_id" },
+const predefinedApiKeys: { name: string; key: string, tags: string[] }[] = [
+  { name: "Gemini API Key", key: "GEMINI_API_KEY", tags: ["IA"] },
+  { name: "YouTube API Key", key: "youtube_api_key", tags: ["Redes Sociales"] },
+  { name: "Instagram Access Token", key: "instagram_access_token", tags: ["Redes Sociales"] },
+  { name: "Instagram Business Account ID", key: "instagram_business_account_id", tags: ["Redes Sociales"] },
 ];
 
 const availableTags = ["IA", "Redes Sociales", "Otro"];
@@ -67,7 +67,6 @@ export default function ApiKeyManager({ className }: { className?: string }) {
         const keyNames = predefinedApiKeys.map(k => k.key);
         const result = await getApiKeys({ services: keyNames });
         setKeyInfo(result.keys); 
-        // Pre-fill keyValues with placeholders for existing keys
         const initialValues: Record<string, string> = {};
         for (const key in result.keys) {
             if (result.keys[key]?.value) {
@@ -98,7 +97,7 @@ export default function ApiKeyManager({ className }: { className?: string }) {
     setVisibleKeys((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const handleSaveKey = async (key: string, name: string) => {
+  const handleSaveKey = async (key: string, name: string, tags: string[]) => {
     const value = keyValues[key];
     if (!value) {
       toast({
@@ -111,8 +110,7 @@ export default function ApiKeyManager({ className }: { className?: string }) {
 
     setLoadingKey(key);
     try {
-      // For predefined keys, we don't re-submit tags, just the value
-      const result = await updateApiKey({ service: key, value });
+      const result = await updateApiKey({ service: key, value, tags });
       if (result.success) {
         toast({
           title: "Success",
@@ -204,11 +202,12 @@ export default function ApiKeyManager({ className }: { className?: string }) {
         ) : (
           <div className="space-y-4">
              <h3 className="text-lg font-medium">Predefined Secrets</h3>
-            {predefinedApiKeys.map(({ name, key }) => {
+            {predefinedApiKeys.map(({ name, key, tags }) => {
               const isLoading = loadingKey === key;
               const isVisible = visibleKeys[key];
               const info = keyInfo[key];
               const hasValue = !!info?.value;
+              const displayValue = keyValues[key] || "";
 
               return (
                 <div key={key} className="space-y-2">
@@ -223,7 +222,7 @@ export default function ApiKeyManager({ className }: { className?: string }) {
                       id={key}
                       type={isVisible ? "text" : "password"}
                       placeholder="Key not set..."
-                      value={keyValues[key] || ""}
+                      value={hasValue && !displayValue && !isVisible ? '••••••••••' : displayValue}
                       onChange={(e) => handleInputChange(key, e.target.value)}
                       disabled={isLoading}
                     />
@@ -235,7 +234,7 @@ export default function ApiKeyManager({ className }: { className?: string }) {
                       </span>
                     </Button>
                     
-                    <Button onClick={() => handleSaveKey(key, name)} disabled={isLoading || !keyValues[key]} size="icon">
+                    <Button onClick={() => handleSaveKey(key, name, tags)} disabled={isLoading || !keyValues[key]} size="icon">
                         {isLoading ? <Loader2 className="animate-spin" /> : <Save />}
                         <span className="sr-only">Save {name}</span>
                     </Button>
