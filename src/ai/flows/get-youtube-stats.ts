@@ -22,6 +22,7 @@ const GetYoutubeStatsOutputSchema = z.object({
   profilePicUrl: z.string().describe('The URL of the profile picture.'),
   subscriberCount: z.string().describe('The number of subscribers.'),
   videoCount: z.string().describe('The total number of videos.'),
+  viewCount: z.string().describe('The total number of views.'),
 });
 export type GetYoutubeStatsOutput = z.infer<typeof GetYoutubeStatsOutputSchema>;
 
@@ -61,6 +62,7 @@ async function fetchChannelData(input: GetYoutubeStatsInput): Promise<GetYoutube
       profilePicUrl: item.snippet.thumbnails.high.url,
       subscriberCount: formatNumber(item.statistics.subscriberCount),
       videoCount: formatNumber(item.statistics.videoCount),
+      viewCount: formatNumber(item.statistics.viewCount),
     };
   } catch (error: any) {
     console.error("Failed to fetch channel data:", error);

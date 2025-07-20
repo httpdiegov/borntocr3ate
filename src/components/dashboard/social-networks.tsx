@@ -162,7 +162,7 @@ export default function SocialNetworks({ className }: { className?: string }) {
               <ChevronRight className="h-6 w-6" />
             </Button>
           </div>
-          <div className="flex justify-around w-full my-4">
+          <div className="grid grid-cols-3 justify-around w-full my-4 text-center">
             <div key="Subscribers">
               <p className="text-2xl font-bold">{stats.subscriberCount}</p>
               <p className="text-sm text-muted-foreground">Subscribers</p>
@@ -170,6 +170,10 @@ export default function SocialNetworks({ className }: { className?: string }) {
              <div key="Videos">
               <p className="text-2xl font-bold">{stats.videoCount}</p>
               <p className="text-sm text-muted-foreground">Videos</p>
+            </div>
+             <div key="Views">
+              <p className="text-2xl font-bold">{stats.viewCount}</p>
+              <p className="text-sm text-muted-foreground">Views</p>
             </div>
           </div>
           <Button asChild className="w-full mt-auto">
