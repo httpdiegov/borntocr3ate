@@ -39,7 +39,7 @@ export const transcribeVideo = ai.defineFlow(
     // Use the core generate function for more direct control.
     // This avoids issues with prompt templating for complex media types.
     const { output } = await ai.generate({
-        model: 'gemini-1.5-flash',
+        model: 'googleai/gemini-1.5-flash',
         prompt: {
             text: 'Transcribe the audio from the following video accurately. Provide only the text of the transcription.',
             media: [{

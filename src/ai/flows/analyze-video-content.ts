@@ -41,7 +41,7 @@ export const analyzeVideoContent = ai.defineFlow(
     console.log("Analizando transcripción para encontrar clips...");
     
     const { output } = await ai.generate({
-      model: 'gemini-1.5-flash',
+      model: 'googleai/gemini-1.5-flash',
       prompt: `Eres un experto en redes sociales y edición de video, especializado en identificar momentos virales en contenido largo.
     
       Tu tarea es analizar la siguiente transcripción de un video y extraer de 2 a 4 clips potenciales que sean perfectos para plataformas como TikTok, Instagram Reels o YouTube Shorts.
