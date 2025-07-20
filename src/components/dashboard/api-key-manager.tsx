@@ -176,6 +176,7 @@ export default function ApiKeyManager({ className }: { className?: string }) {
               const isEditing = editingKey === key;
               const isLoading = loadingKey === key;
               const isReadOnly = !isEditing && isSet;
+              const isVisible = visibleKeys[key];
 
               return (
                 <div key={key} className="space-y-2">
@@ -183,18 +184,22 @@ export default function ApiKeyManager({ className }: { className?: string }) {
                   <div className="flex items-center gap-2">
                     <Input
                       id={key}
-                      type={visibleKeys[key] ? "text" : "password"}
-                      placeholder={isSet ? "" : "Not set"}
+                      type={isEditing && isVisible ? "text" : "password"}
+                      placeholder={isSet && !isEditing ? "" : "Enter key value..."}
                       value={isReadOnly ? "••••••••••••••••" : (keyValues[key] || "")}
                       onChange={(e) => handleInputChange(key, e.target.value)}
                       readOnly={isReadOnly}
                       className={isReadOnly ? "cursor-default focus-visible:ring-0" : ""}
                       disabled={isLoading}
                     />
-                    <Button variant="ghost" size="icon" onClick={() => toggleVisibility(key)} disabled={isLoading}>
-                      {visibleKeys[key] ? <EyeOff /> : <Eye />}
-                      <span className="sr-only">{visibleKeys[key] ? 'Hide' : 'Show'} key</span>
-                    </Button>
+                    {isEditing && (
+                      <Button variant="ghost" size="icon" onClick={() => toggleVisibility(key)} disabled={isLoading}>
+                        {isVisible ? <EyeOff /> : <Eye />}
+                        <span className="sr-only">
+                          {isVisible ? 'Hide' : 'Show'} key while editing
+                        </span>
+                      </Button>
+                    )}
                     
                     {isEditing ? (
                       <>
