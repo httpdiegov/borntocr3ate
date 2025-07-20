@@ -6,6 +6,7 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
+import { googleAI } from '@genkit-ai/googleai';
 
 // Define the schema for the input: a video file as a data URI and its content type
 const TranscribeVideoInputSchema = z.object({
@@ -37,7 +38,8 @@ const transcriptionPrompt = ai.definePrompt({
   Video: {{media url=videoDataUri contentType=contentType}}`,
   
   // Use a more robust model that supports video input like Gemini 1.5 Pro.
-  model: 'googleai/gemini-1.5-pro-preview-0514', 
+  // We reference the model directly from the plugin to ensure it's resolved correctly.
+  model: googleAI.model('gemini-1.5-pro-preview-0514'), 
 });
 
 // Define the flow that will be called from the frontend
