@@ -71,10 +71,12 @@ export const analyzeVideoContent = ai.defineFlow(
   },
   async (input) => {
     console.log("Analizando transcripción para encontrar clips...");
-    const { output } = await videoAnalysisPrompt(input);
+    const response = await videoAnalysisPrompt(input);
+    const output = response.output;
 
-    if (!output || !output.clips) {
-        throw new Error("La IA no pudo generar ningún clip.");
+    if (!output || !Array.isArray(output.clips) || output.clips.length === 0) {
+        console.error("La respuesta de la IA no fue válida o no contenía clips:", output);
+        throw new Error("La IA no pudo generar ningún clip con el formato esperado.");
     }
     
     // Ordenar los clips por puntuación de viralidad descendente
