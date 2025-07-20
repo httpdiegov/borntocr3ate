@@ -2,12 +2,15 @@ import {genkit} from 'genkit';
 import {googleAI} from '@genkit-ai/googleai';
 import { accessSecret } from './tools/get-api-key-internal';
 
-async function initializeGoogleAI() {
-    const apiKey = await accessSecret('GEMINI_API_KEY');
-    return googleAI({ apiKey });
-}
+// This function now initializes the plugin with an apiKey promise.
+// Genkit will resolve this promise before making a call.
+// This prevents the app from crashing on startup if the key isn't ready.
+const googleAIPlugin = googleAI({
+  apiKey: accessSecret('GEMINI_API_KEY'),
+});
+
 
 export const ai = genkit({
-  plugins: [await initializeGoogleAI()],
+  plugins: [googleAIPlugin],
   model: 'googleai/gemini-2.0-flash',
 });

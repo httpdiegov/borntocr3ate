@@ -52,7 +52,9 @@ async function updateApiKeyInSecretManager(input: UpdateApiKeyInput): Promise<Up
             },
           },
         });
+        console.log(`Secret ${secretName} created.`);
       } else {
+        // Re-throw other errors
         throw e;
       }
     }
@@ -69,7 +71,8 @@ async function updateApiKeyInSecretManager(input: UpdateApiKeyInput): Promise<Up
     return { success: true, message: `Successfully updated ${secretName}.` };
   } catch (error: any) {
     console.error(`Failed to update secret ${secretName}:`, error);
-    return { success: false, message: error.message || 'An unknown error occurred.' };
+    const errorMessage = error.details || error.message || 'An unknown error occurred.';
+    return { success: false, message: `Failed to save secret: ${errorMessage}` };
   }
 }
 

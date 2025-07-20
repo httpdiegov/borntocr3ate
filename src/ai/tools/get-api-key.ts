@@ -1,3 +1,5 @@
+'use server';
+
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 import { accessSecret } from './get-api-key-internal';
@@ -12,11 +14,12 @@ const ApiKeyInputSchema = z.object({
 export const getApiKey = ai.defineTool(
   {
     name: 'getApiKey',
-    description: 'Retrieves an API key from a secure store.',
+    description: 'Retrieves an API key from Google Secret Manager.',
     inputSchema: ApiKeyInputSchema,
     outputSchema: z.string().optional(),
   },
   async (input) => {
+    console.log(`Tool: Getting API Key for ${input.service}`);
     return accessSecret(input.service);
   }
 );
