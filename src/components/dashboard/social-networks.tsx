@@ -22,7 +22,8 @@ type SocialAccount = {
   handle: string;
   href: string;
   icon: JSX.Element;
-  statsComponent: React.FC<{ handle: string }>;
+  statsComponent: React.FC<{ handle: string; businessIdKey?: string }>;
+  businessIdKey?: string;
 };
 
 type ApiKey = {
@@ -143,7 +144,7 @@ const YouTubeStats: React.FC<{ handle: string }> = ({ handle }) => {
   return null;
 }
 
-const InstagramStats: React.FC<{ handle: string }> = ({ handle }) => {
+const InstagramStats: React.FC<{ handle: string, businessIdKey?: string }> = ({ handle, businessIdKey = 'instagram_business_account_id' }) => {
     const [stats, setStats] = useState<GetInstagramBusinessStatsOutput | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -167,14 +168,14 @@ const InstagramStats: React.FC<{ handle: string }> = ({ handle }) => {
                 if (storedKeys) {
                     const keys: ApiKey[] = JSON.parse(storedKeys);
                     accessToken = keys.find(k => k.service === 'instagram_access_token')?.key;
-                    businessAccountId = keys.find(k => k.service === 'instagram_business_account_id')?.key;
+                    businessAccountId = keys.find(k => k.service === businessIdKey)?.key;
                 }
 
                 if (!accessToken) {
                     throw new Error("Instagram Access Token not found. Please add it in the API Key Manager with the service name 'instagram_access_token'.");
                 }
                 if (!businessAccountId) {
-                    throw new Error("Instagram Business Account ID not found. Please add it in the API Key Manager with the service name 'instagram_business_account_id'.");
+                    throw new Error(`Instagram Business Account ID key '${businessIdKey}' not found. Please add it in the API Key Manager.`);
                 }
                 
                 const result = await getInstagramBusinessStats({
@@ -191,7 +192,7 @@ const InstagramStats: React.FC<{ handle: string }> = ({ handle }) => {
         };
 
         fetchStats();
-    }, [handle, isMounted]);
+    }, [handle, isMounted, businessIdKey]);
 
     if (!isMounted || loading) {
         return (
@@ -260,6 +261,7 @@ const socialAccounts: SocialAccount[] = [
     href: "https://www.instagram.com/ilovesanrio666",
     icon: <InstagramIcon className="h-6 w-6" />,
     statsComponent: InstagramStats,
+    businessIdKey: "instagram_business_account_id_sanrio",
   },
 ];
 
@@ -303,7 +305,7 @@ export default function SocialNetworks({ className }: { className?: string }) {
             </Button>
             
             <div className="flex-grow flex flex-col items-center">
-                <StatsComponent handle={account.handle} />
+                <StatsComponent handle={account.handle} businessIdKey={account.businessIdKey} />
             </div>
 
             <Button
