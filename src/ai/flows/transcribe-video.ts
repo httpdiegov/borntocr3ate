@@ -4,9 +4,8 @@
  * @fileOverview A Genkit flow for transcribing video content.
  */
 
-import { ai } from '@/ai/genkit';
 import { z } from 'zod';
-import { googleAI } from '@genkit-ai/googleai';
+import { ai } from '@/ai/genkit';
 
 // Define the schema for the input: a video file as a data URI and its content type
 const TranscribeVideoInputSchema = z.object({
@@ -40,7 +39,7 @@ export const transcribeVideo = ai.defineFlow(
     // Use the core generate function for more direct control.
     // This avoids issues with prompt templating for complex media types.
     const { output } = await ai.generate({
-        model: googleAI.model('gemini-1.5-flash'), // Specify the model directly here for robustness
+        model: 'gemini-1.5-flash',
         prompt: {
             text: 'Transcribe the audio from the following video accurately. Provide only the text of the transcription.',
             media: [{

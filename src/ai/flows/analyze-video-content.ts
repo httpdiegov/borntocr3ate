@@ -6,7 +6,6 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
-import { googleAI } from '@genkit-ai/googleai';
 
 // Define el esquema para la entrada del flujo
 const AnalyzeVideoInputSchema = z.object({
@@ -31,39 +30,6 @@ const AnalyzeVideoOutputSchema = z.object({
 });
 export type AnalyzeVideoOutput = z.infer<typeof AnalyzeVideoOutputSchema>;
 
-
-// Define el prompt de IA que hará el trabajo pesado
-const videoAnalysisPrompt = ai.definePrompt({
-    name: 'videoAnalysisPrompt',
-    input: { schema: AnalyzeVideoInputSchema },
-    output: { schema: AnalyzeVideoOutputSchema },
-    model: googleAI.model('gemini-1.5-flash'), // Specify model directly
-    prompt: `Eres un experto en redes sociales y edición de video, especializado en identificar momentos virales en contenido largo.
-    
-    Tu tarea es analizar la siguiente transcripción de un video y extraer de 2 a 4 clips potenciales que sean perfectos para plataformas como TikTok, Instagram Reels o YouTube Shorts.
-    
-    Para cada clip, debes:
-    1.  Crear un título corto y muy atractivo que genere curiosidad.
-    2.  Escribir un resumen conciso de lo que trata el clip.
-    3.  Estimar un timestamp de inicio y fin (simulado, ya que no tienes el video real).
-    4.  Asignarle una "puntuación de viralidad" del 1 al 10, donde 10 es un éxito viral garantizado.
-    5.  Asignar un ID único a cada clip.
-
-    Prioriza momentos que contengan:
-    - Preguntas provocadoras.
-    - Declaraciones audaces o controvertidas.
-    - Consejos prácticos y rápidos.
-    - Momentos emocionales.
-    - "Ganchos" que capturen la atención en los primeros 3 segundos.
-
-    Aquí está la transcripción:
-    ---
-    {{{transcription}}}
-    ---
-    `,
-});
-
-
 // Define el flujo que orquesta la llamada al prompt y que será exportado
 export const analyzeVideoContent = ai.defineFlow(
   {
@@ -73,8 +39,36 @@ export const analyzeVideoContent = ai.defineFlow(
   },
   async (input) => {
     console.log("Analizando transcripción para encontrar clips...");
-    const response = await videoAnalysisPrompt(input);
-    const output = response.output;
+    
+    const { output } = await ai.generate({
+      model: 'gemini-1.5-flash',
+      prompt: `Eres un experto en redes sociales y edición de video, especializado en identificar momentos virales en contenido largo.
+    
+      Tu tarea es analizar la siguiente transcripción de un video y extraer de 2 a 4 clips potenciales que sean perfectos para plataformas como TikTok, Instagram Reels o YouTube Shorts.
+      
+      Para cada clip, debes:
+      1.  Crear un título corto y muy atractivo que genere curiosidad.
+      2.  Escribir un resumen conciso de lo que trata el clip.
+      3.  Estimar un timestamp de inicio y fin (simulado, ya que no tienes el video real).
+      4.  Asignarle una "puntuación de viralidad" del 1 al 10, donde 10 es un éxito viral garantizado.
+      5.  Asignar un ID único a cada clip.
+  
+      Prioriza momentos que contengan:
+      - Preguntas provocadoras.
+      - Declaraciones audaces o controvertidas.
+      - Consejos prácticos y rápidos.
+      - Momentos emocionales.
+      - "Ganchos" que capturen la atención en los primeros 3 segundos.
+  
+      Aquí está la transcripción:
+      ---
+      ${input.transcription}
+      ---
+      `,
+      output: {
+        schema: AnalyzeVideoOutputSchema,
+      }
+    });
 
     if (!output || !Array.isArray(output.clips) || output.clips.length === 0) {
         console.error("La respuesta de la IA no fue válida o no contenía clips:", output);
