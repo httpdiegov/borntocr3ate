@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -51,11 +52,23 @@ async function generateUrl(input: GenerateUploadUrlInput): Promise<GenerateUploa
   const storage = getStorageClient();
   const bucket = storage.bucket(bucketName);
 
-  // Check if the bucket exists. If not, provide a helpful error message.
+  // Check if the bucket exists. If not, create it.
   const [exists] = await bucket.exists();
   if (!exists) {
-    console.error(`Bucket '${bucketName}' does not exist.`);
-    throw new Error(`Storage bucket '${bucketName}' not found. Please create it in your Google Cloud project. You may also need to enable public access if you haven't already.`);
+    console.log(`Bucket '${bucketName}' does not exist. Creating it...`);
+    try {
+        // Create the bucket.
+        await storage.createBucket(bucketName);
+        console.log(`Bucket '${bucketName}' created.`);
+        
+        // Optional: Make the bucket public for simplicity in this demo.
+        // For production apps, you should use more granular permissions.
+        await bucket.makePublic();
+        console.log(`Bucket '${bucketName}' made public.`);
+    } catch (creationError: any) {
+        console.error(`Failed to create bucket '${bucketName}':`, creationError);
+        throw new Error(`Failed to create storage bucket: ${creationError.message}`);
+    }
   }
 
   const file = bucket.file(input.filename);
