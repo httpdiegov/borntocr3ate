@@ -2,16 +2,14 @@
 
 /**
  * @fileOverview A flow for updating API keys in a secure store.
- *
- * NOTE: This is a placeholder. In a production environment, this flow would
- * write the key to a secure, persistent secret management service like
- * Google Secret Manager. For this demo, it only simulates the action
- * and does not actually persist the key beyond the server's current session.
- * Modifying .env files at runtime is not a recommended practice.
+ * This flow now writes the key to Google Secret Manager.
  */
 
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
+import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
+
+const secretManagerClient = new SecretManagerServiceClient();
 
 const UpdateApiKeyInputSchema = z.object({
   service: z
@@ -23,34 +21,56 @@ export type UpdateApiKeyInput = z.infer<typeof UpdateApiKeyInputSchema>;
 
 const UpdateApiKeyOutputSchema = z.object({
   success: z.boolean(),
+  message: z.string().optional(),
 });
 export type UpdateApiKeyOutput = z.infer<typeof UpdateApiKeyOutputSchema>;
 
 
-async function updateApiKeyInSecureStore(input: UpdateApiKeyInput): Promise<UpdateApiKeyOutput> {
-  console.log(
-    `Simulating update for ${input.service}. In a real app, this would write to a secure secret manager.`
-  );
-  
-  // In a real application, you would implement logic here to write to
-  // Google Secret Manager, a database, or another secure store.
-  // For this example, we'll just update the current process's environment variables.
-  // IMPORTANT: This will NOT persist across server restarts or in a real cloud environment.
-  switch (input.service) {
-    case 'youtube_api_key':
-      process.env.YOUTUBE_API_KEY = input.value;
-      break;
-    case 'instagram_access_token':
-      process.env.INSTAGRAM_ACCESS_TOKEN = input.value;
-      break;
-    case 'instagram_business_account_id':
-      process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID = input.value;
-      break;
-    default:
-      throw new Error('Unsupported service');
+async function updateApiKeyInSecretManager(input: UpdateApiKeyInput): Promise<UpdateApiKeyOutput> {
+  const projectId = process.env.GCLOUD_PROJECT;
+  if (!projectId) {
+    return { success: false, message: 'GCLOUD_PROJECT environment variable not set.' };
   }
 
-  return { success: true };
+  const secretName = input.service;
+  const parent = `projects/${projectId}`;
+  const secretPath = `${parent}/secrets/${secretName}`;
+
+  try {
+    // Check if secret exists, if not, create it
+    try {
+      await secretManagerClient.getSecret({ name: secretPath });
+    } catch (e: any) {
+      if (e.code === 5) { // NOT_FOUND
+        console.log(`Secret ${secretName} not found. Creating it...`);
+        await secretManagerClient.createSecret({
+          parent,
+          secretId: secretName,
+          secret: {
+            replication: {
+              automatic: {},
+            },
+          },
+        });
+      } else {
+        throw e;
+      }
+    }
+
+    // Add a new version with the provided value
+    const [version] = await secretManagerClient.addSecretVersion({
+      parent: secretPath,
+      payload: {
+        data: Buffer.from(input.value, 'utf8'),
+      },
+    });
+
+    console.log(`Added secret version ${version.name}`);
+    return { success: true, message: `Successfully updated ${secretName}.` };
+  } catch (error: any) {
+    console.error(`Failed to update secret ${secretName}:`, error);
+    return { success: false, message: error.message || 'An unknown error occurred.' };
+  }
 }
 
 
@@ -60,5 +80,5 @@ export const updateApiKey = ai.defineFlow(
     inputSchema: UpdateApiKeyInputSchema,
     outputSchema: UpdateApiKeyOutputSchema,
   },
-  updateApiKeyInSecureStore
+  updateApiKeyInSecretManager
 );

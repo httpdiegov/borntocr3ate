@@ -27,7 +27,7 @@ export default function ApiKeyManager({ className }: { className?: string }) {
   const [keyValues, setKeyValues] = useState<Record<ServiceKey, string>>(
     {} as Record<ServiceKey, string>
   );
-  const [loading, setLoading] = useState(false);
+  const [loadingKey, setLoadingKey] = useState<ServiceKey | null>(null);
   const { toast } = useToast();
 
   const handleInputChange = (key: ServiceKey, value: string) => {
@@ -45,22 +45,27 @@ export default function ApiKeyManager({ className }: { className?: string }) {
       return;
     }
 
-    setLoading(true);
+    setLoadingKey(key);
     try {
-      await updateApiKey({ service: key, value });
-      toast({
-        title: "Success",
-        description: `${key} has been updated. NOTE: Server restart may be required for changes to take effect.`,
-      });
+      const result = await updateApiKey({ service: key, value });
+      if (result.success) {
+        toast({
+          title: "Success",
+          description: result.message || `${key} has been updated.`,
+        });
+        setKeyValues((prev) => ({...prev, [key]: ''})); // Clear input on success
+      } else {
+         throw new Error(result.message || 'An unknown error occurred.');
+      }
     } catch (error: any) {
       console.error("Failed to save API key:", error);
       toast({
         title: "Failed to save key",
-        description: error.message || "An unknown error occurred.",
+        description: error.message,
         variant: "destructive",
       });
     } finally {
-      setLoading(false);
+      setLoadingKey(null);
     }
   };
 
@@ -72,7 +77,7 @@ export default function ApiKeyManager({ className }: { className?: string }) {
           API Key Manager
         </CardTitle>
         <CardDescription>
-          Manage your third-party API keys securely. These are stored server-side.
+          Manage your third-party API keys securely in Google Secret Manager.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -83,13 +88,13 @@ export default function ApiKeyManager({ className }: { className?: string }) {
               <Input
                 id={key}
                 type="password"
-                placeholder={`Enter ${name}`}
+                placeholder={`Enter new ${name}`}
                 value={keyValues[key] || ""}
                 onChange={(e) => handleInputChange(key, e.target.value)}
-                disabled={loading}
+                disabled={!!loadingKey}
               />
-              <Button onClick={() => handleSaveKey(key)} disabled={loading || !keyValues[key]}>
-                {loading ? (
+              <Button onClick={() => handleSaveKey(key)} disabled={loadingKey === key || !keyValues[key]}>
+                {loadingKey === key ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <Save className="h-4 w-4" />

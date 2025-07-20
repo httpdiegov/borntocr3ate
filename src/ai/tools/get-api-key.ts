@@ -2,6 +2,7 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
+import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 
 const ApiKeyInputSchema = z.object({
   service: z
@@ -9,9 +10,32 @@ const ApiKeyInputSchema = z.object({
     .describe('The service for which to retrieve the API key.'),
 });
 
-// This tool simulates fetching an API key from a secure, server-side store
-// like Google Secret Manager or by using environment variables.
-// For this example, we'll use environment variables.
+const secretManagerClient = new SecretManagerServiceClient();
+
+async function accessSecret(secretName: string): Promise<string | undefined> {
+  const projectId = process.env.GCLOUD_PROJECT;
+  if (!projectId) {
+    console.error('GCLOUD_PROJECT environment variable not set.');
+    return undefined;
+  }
+  
+  try {
+    const [version] = await secretManagerClient.accessSecretVersion({
+      name: `projects/${projectId}/secrets/${secretName}/versions/latest`,
+    });
+
+    const payload = version.payload?.data?.toString();
+    if (!payload) {
+      console.warn(`Secret ${secretName} has no payload.`);
+    }
+    return payload;
+  } catch (error) {
+    console.error(`Failed to access secret ${secretName}:`, error);
+    return undefined;
+  }
+}
+
+// This tool fetches an API key from Google Secret Manager.
 export const getApiKey = ai.defineTool(
   {
     name: 'getApiKey',
@@ -20,15 +44,6 @@ export const getApiKey = ai.defineTool(
     outputSchema: z.string().optional(),
   },
   async (input) => {
-    switch (input.service) {
-      case 'youtube_api_key':
-        return process.env.YOUTUBE_API_KEY;
-      case 'instagram_access_token':
-        return process.env.INSTAGRAM_ACCESS_TOKEN;
-      case 'instagram_business_account_id':
-        return process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID;
-      default:
-        return undefined;
-    }
+    return accessSecret(input.service);
   }
 );
