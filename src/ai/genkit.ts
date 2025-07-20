@@ -1,12 +1,13 @@
 import {genkit} from 'genkit';
 import {googleAI} from '@genkit-ai/googleai';
-import { accessSecret } from './tools/get-api-key-internal';
+import {config} from 'dotenv';
 
-// This function now initializes the plugin with a function that resolves the apiKey promise.
-// Genkit will call this function to get the key just before making an API call.
-// This ensures that even if the key is updated, the next call will use the new one.
+config();
+
+// Initialize the plugin with the API key from environment variables.
+// This is a more direct way for debugging authentication issues.
 const googleAIPlugin = googleAI({
-  apiKey: () => accessSecret('GEMINI_API_KEY'),
+  apiKey: process.env.GEMINI_API_KEY,
 });
 
 
