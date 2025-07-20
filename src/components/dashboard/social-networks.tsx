@@ -235,8 +235,8 @@ const socialAccounts: SocialAccount[] = [
   },
   {
     platform: "Instagram",
-    handle: "@instagram",
-    href: "https://www.instagram.com/instagram",
+    handle: "@ilovesanrio666",
+    href: "https://www.instagram.com/ilovesanrio666",
     icon: <InstagramIcon className="h-6 w-6" />,
     statsComponent: InstagramStats,
   },
