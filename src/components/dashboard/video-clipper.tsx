@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Film, Bot, Loader2, Scissors, User, Clock, Wand, Download, Settings, Users, CheckCircle } from "lucide-react";
+import { Film, Bot, Loader2, Scissors, User, Clock, Wand, Settings, CheckCircle } from "lucide-react";
 import { analyzeVideoContent, type AnalyzedClip, type Speaker } from "@/ai/flows/analyze-video-content";
 import { generateUploadUrl, type GenerateUploadUrlOutput } from "@/ai/flows/generate-upload-url";
 import { finalizeUpload } from "@/ai/flows/finalize-upload";
@@ -20,7 +20,7 @@ import { createVideoClip } from "@/ai/flows/create-video-clip";
 import { Badge } from "../ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "../ui/label";
-import { RadioGroup, RadioGroupItem } from "../ui/radio-group";
+import { getSpeakerPosition, type GetSpeakerPositionOutput } from "@/ai/flows/get-speaker-position";
 
 const sanitizeFilename = (filename: string): string => {
   return filename.replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -195,7 +195,6 @@ function SmartClipperTab() {
 
 function ManualReframeTab() {
   const [videoFile, setVideoFile] = useState<File | null>(null);
-  const [speakerPosition, setSpeakerPosition] = useState<"izquierda" | "centro" | "derecha">("centro");
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<{ path: string; command: string } | null>(null);
   const { toast } = useToast();
@@ -223,26 +222,27 @@ function ManualReframeTab() {
     try {
       toast({ title: "Preparando subida..." });
       videoInfo = await generateUploadUrl({ filename: safeFilename, contentType: videoFile.type });
+      
       toast({ title: "Subiendo clip..." });
       const uploadResponse = await fetch(videoInfo.signedUrl, { method: 'PUT', body: videoFile, headers: { 'Content-Type': videoFile.type } });
       if (!uploadResponse.ok) throw new Error(`Upload failed with status: ${uploadResponse.status}`);
-      toast({ title: "Subida completa. Finalizando..." });
+      
+      toast({ title: "Finalizando subida..." });
       const finalizeResult = await finalizeUpload({ gcsUri: videoInfo.gcsUri });
       if (!finalizeResult.success) throw new Error(finalizeResult.message);
       
-      toast({ title: "Reencuadrando clip...", description: "Aplicando recorte vertical con ffmpeg." });
+      toast({ title: "IA detectando posición del orador..." });
+      const positionResult = await getSpeakerPosition({ publicUrl: videoInfo.publicUrl, contentType: videoFile.type });
+      if (!positionResult.speaker) {
+          throw new Error("La IA no pudo determinar la posición del orador principal.");
+      }
 
-      const fakeSpeaker: Speaker = {
-        id: "manual_speaker",
-        description: `Speaker at ${speakerPosition}`,
-        position: speakerPosition,
-      };
-
+      toast({ title: "Reencuadrando clip...", description: `Enfocando en: ${positionResult.speaker.position}` });
       const clipResult = await createVideoClip({
         videoUrl: videoInfo.publicUrl,
         startTime: 0,
         endTime: 9999, // Process the whole clip
-        speaker: fakeSpeaker,
+        speaker: positionResult.speaker,
         clipTitle: `reframed_${videoFile.name}`
       });
 
@@ -267,27 +267,9 @@ function ManualReframeTab() {
         <Input id="manual-video-upload" type="file" accept="video/*" onChange={handleFileChange} disabled={isLoading} />
       </div>
 
-      <div className="space-y-2">
-        <Label>2. Elige la posición a enfocar</Label>
-        <RadioGroup value={speakerPosition} onValueChange={(value: any) => setSpeakerPosition(value)} className="flex gap-4" disabled={isLoading}>
-          <div className="flex items-center space-x-2">
-            <RadioGroupItem value="izquierda" id="r1" />
-            <Label htmlFor="r1">Izquierda</Label>
-          </div>
-          <div className="flex items-center space-x-2">
-            <RadioGroupItem value="centro" id="r2" />
-            <Label htmlFor="r2">Centro</Label>
-          </div>
-          <div className="flex items-center space-x-2">
-            <RadioGroupItem value="derecha" id="r3" />
-            <Label htmlFor="r3">Derecha</Label>
-          </div>
-        </RadioGroup>
-      </div>
-      
       <Button onClick={handleReframe} className="w-full" disabled={!videoFile || isLoading}>
         {isLoading ? <Loader2 className="animate-spin mr-2" /> : <Scissors className="mr-2" />}
-        {isLoading ? "Procesando..." : "Reencuadrar a Vertical"}
+        {isLoading ? "Procesando..." : "Test: Reencuadrar Clip Automáticamente"}
       </Button>
 
       {result && (
@@ -306,7 +288,7 @@ function ManualReframeTab() {
       )}
        {!result && !isLoading && (
             <div className="text-center text-muted-foreground py-12">
-              <p>Sube un clip para empezar a probar.</p>
+              <p>Sube un clip para empezar la prueba de reencuadre.</p>
             </div>
           )
         }

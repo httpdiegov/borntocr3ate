@@ -15,4 +15,5 @@ import '@/ai/flows/transcribe-video';
 import '@/ai/flows/generate-upload-url';
 import '@/ai/flows/finalize-upload';
 import '@/ai/flows/create-video-clip';
+import '@/ai/flows/get-speaker-position';
 import './tools/get-api-key-internal';
