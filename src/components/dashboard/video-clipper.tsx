@@ -87,7 +87,7 @@ function SmartClipperTab() {
       setIsUploading(false);
       setIsAnalyzing(true);
       toast({ title: "Comenzando análisis...", description: "La IA está procesando el video. Esto puede tomar varios minutos." });
-      const result = await analyzeVideoContent({ publicUrl: videoInfo.publicUrl, contentType: videoFile.type });
+      const result = await analyzeVideoContent({ gcsUri: videoInfo.gcsUri, contentType: videoFile.type });
       setAnalysisResult({ clips: result.clips, speakers: result.speakers, videoInfo });
       toast({ title: "Análisis completo!", description: `Se encontraron ${result.clips.length} clips potenciales.` });
     } catch (error: any) {
@@ -231,7 +231,7 @@ function ManualReframeTab() {
       if (!finalizeResult.success) throw new Error(finalizeResult.message);
       
       toast({ title: "IA analizando video y oradores..." });
-      const analysisResult = await analyzeVideoContent({ publicUrl: videoInfo.publicUrl, contentType: videoFile.type });
+      const analysisResult = await analyzeVideoContent({ gcsUri: videoInfo.gcsUri, contentType: videoFile.type });
 
       if (!analysisResult.speakers || analysisResult.speakers.length === 0) {
         throw new Error("La IA no pudo identificar a ningún orador en el video.");

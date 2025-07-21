@@ -27,7 +27,7 @@ const TranscriptionSegmentSchema = z.object({
 
 // Define the schema for the input of the flow
 const AnalyzeVideoInputSchema = z.object({
-  publicUrl: z.string().url().describe('The public HTTPS URL of the video file.'),
+  gcsUri: z.string().describe('The GCS URI of the video file (e.g., "gs://bucket/file").'),
   contentType: z.string().describe('The MIME type of the video file (e.g., "video/mp4").'),
 });
 export type AnalyzeVideoInput = z.infer<typeof AnalyzeVideoInputSchema>;
@@ -76,7 +76,7 @@ Por favor, realiza las siguientes tareas en orden:
 
 Devuelve toda esta información en el formato JSON solicitado.
 
-Video a analizar: {{media url=publicUrl contentType=contentType}}
+Video a analizar: {{media uri=gcsUri contentType=contentType}}
 `,
 });
 
