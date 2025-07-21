@@ -4,6 +4,7 @@
 /**
  * @fileOverview A flow for creating a vertical video clip from a larger video using ffmpeg.
  * This version uses a robust "cut, concatenate, and re-add audio" method to ensure stability and sync.
+ * It performs all mathematical calculations in TypeScript to avoid OS-specific command-line parsing issues.
  */
 
 import { z } from 'zod';
@@ -72,7 +73,7 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
     const videoBuffer = await response.arrayBuffer();
     fs.writeFileSync(originalVideoPath, Buffer.from(videoBuffer));
     console.log(`Video downloaded to ${originalVideoPath}`);
-    
+
     const relevantTranscription = transcription.filter(
         (seg) => seg.startTime < clipEndTime && seg.endTime > clipStartTime
     ).sort((a, b) => a.startTime - b.startTime);
@@ -84,6 +85,12 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
     const segmentFilePaths: string[] = [];
     allFfmpegCommands = "";
 
+    // This is the most robust formula to calculate the crop.
+    // It calculates the center of the crop based on the face's pixel position
+    // and then subtracts half the crop width to get the starting x coordinate.
+    // It's wrapped in max(0, min(...)) to prevent the crop from going out of bounds.
+    const cropX_expr_template = `max(0, min(iw - (ih*9/16), %FACE_X_NORM%*iw - (ih*9/16)/2))`;
+    
     // Step 1: Create a cropped video part for each transcription segment (no audio)
     for (const [index, segment] of relevantTranscription.entries()) {
         const segmentStart = Math.max(segment.startTime, clipStartTime);
@@ -92,11 +99,7 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
         if (duration <= 0) continue;
 
         const faceX_norm = segment.faceCoordinates.x;
-        // This is the most robust formula.
-        // It calculates the center of the crop based on the face's pixel position
-        // and then subtracts half the crop width to get the starting x coordinate.
-        // It's wrapped in max(0, min(...)) to prevent the crop from going out of bounds.
-        const cropX_expr = `max(0, min(iw - (ih*9/16), (${faceX_norm})*iw - (ih*9/16)/2))`;
+        const cropX_expr = cropX_expr_template.replace('%FACE_X_NORM%', faceX_norm.toString());
         
         const partPath = path.join(tempDir, `part_${index}.mp4`);
         segmentFilePaths.push(partPath);
