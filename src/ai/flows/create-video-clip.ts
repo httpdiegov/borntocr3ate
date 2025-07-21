@@ -92,11 +92,11 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
         if (duration <= 0) continue;
 
         const faceX_norm = segment.faceCoordinates.x;
-        // Perform calculations in TypeScript to get a final numeric value for cropX
-        // This logic is designed for split-screen videos where speakers are in the left or right panels.
-        // It maps the faceX coordinate (0 to 1) to the active area of the screen.
-        // For a typical 16:9 video, the two 9:16 panels would be in the middle half.
-        const cropX_expr = `(iw/4) + (iw/2)*${faceX_norm} - (ih*9/32)`;
+        // This is the most robust formula.
+        // It calculates the center of the crop based on the face's pixel position
+        // and then subtracts half the crop width to get the starting x coordinate.
+        // It's wrapped in max(0, min(...)) to prevent the crop from going out of bounds.
+        const cropX_expr = `max(0, min(iw - (ih*9/16), (${faceX_norm})*iw - (ih*9/16)/2))`;
         
         const partPath = path.join(tempDir, `part_${index}.mp4`);
         segmentFilePaths.push(partPath);
