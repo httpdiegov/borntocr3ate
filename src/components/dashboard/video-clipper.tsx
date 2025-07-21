@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Film, Bot, Loader2, Scissors, User, Clock, Wand, Settings, CheckCircle } from "lucide-react";
+import { Film, Bot, Loader2, Scissors, User, Clock, Wand, Settings, CheckCircle, AlertTriangle } from "lucide-react";
 import { analyzeVideoContent, type AnalyzedClip, type Speaker } from "@/ai/flows/analyze-video-content";
 import { generateUploadUrl, type GenerateUploadUrlOutput } from "@/ai/flows/generate-upload-url";
 import { finalizeUpload } from "@/ai/flows/finalize-upload";
@@ -20,7 +20,6 @@ import { createVideoClip } from "@/ai/flows/create-video-clip";
 import { Badge } from "../ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "../ui/label";
-import { getSpeakerPosition } from "@/ai/flows/get-speaker-position";
 
 const sanitizeFilename = (filename: string): string => {
   return filename.replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -231,18 +230,22 @@ function ManualReframeTab() {
       const finalizeResult = await finalizeUpload({ gcsUri: videoInfo.gcsUri });
       if (!finalizeResult.success) throw new Error(finalizeResult.message);
       
-      toast({ title: "IA detectando posición del orador..." });
-      const positionResult = await getSpeakerPosition({ publicUrl: videoInfo.publicUrl, contentType: videoFile.type });
-      if (!positionResult.speaker) {
-          throw new Error("La IA no pudo determinar la posición del orador principal.");
-      }
+      toast({ title: "IA analizando video y oradores..." });
+      const analysisResult = await analyzeVideoContent({ publicUrl: videoInfo.publicUrl, contentType: videoFile.type });
 
-      toast({ title: "Reencuadrando clip...", description: `Enfocando en: ${positionResult.speaker.position}` });
+      if (!analysisResult.speakers || analysisResult.speakers.length === 0) {
+        throw new Error("La IA no pudo identificar a ningún orador en el video.");
+      }
+      
+      const mainSpeaker = analysisResult.speakers[0];
+      toast({ title: "Orador detectado", description: `Enfocando en: ${mainSpeaker.description} (${mainSpeaker.position})`});
+
+      toast({ title: "Reencuadrando clip..." });
       const clipResult = await createVideoClip({
         videoUrl: videoInfo.publicUrl,
         startTime: 0,
         endTime: 9999, // Process the whole clip
-        speaker: positionResult.speaker,
+        speaker: mainSpeaker,
         clipTitle: `reframed_${videoFile.name}`
       });
 
@@ -271,6 +274,14 @@ function ManualReframeTab() {
         {isLoading ? <Loader2 className="animate-spin mr-2" /> : <Scissors className="mr-2" />}
         {isLoading ? "Procesando..." : "Test: Reencuadrar Clip Automáticamente"}
       </Button>
+
+      {isLoading && (
+          <div className="text-center text-muted-foreground py-12">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
+            <p>Subiendo y analizando...</p>
+            <p className="text-sm">Esto puede tardar unos minutos.</p>
+          </div>
+      )}
 
       {result && (
         <div className="pt-2 space-y-2">
