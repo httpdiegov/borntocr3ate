@@ -53,7 +53,13 @@ const AnalyzeVideoOutputSchema = z.object({
 export type AnalyzeVideoOutput = z.infer<typeof AnalyzeVideoOutputSchema>;
 
 
-export async function analyzeVideoContent(input: AnalyzeVideoInput): Promise<AnalyzeVideoOutput> {
+export const analyzeVideoContent = ai.defineFlow(
+  {
+    name: 'analyzeVideoContentFlow',
+    inputSchema: AnalyzeVideoInputSchema,
+    outputSchema: AnalyzeVideoOutputSchema,
+  },
+  async (input) => {
     console.log("Analizando video para identificar oradores, transcribir y encontrar clips...");
     
     const { output } = await ai.generate({
@@ -95,4 +101,5 @@ Devuelve toda esta información en el formato JSON solicitado.`},
 
     console.log(`Análisis completo. Se encontraron ${output.clips.length} clips y ${output.speakers.length} oradores.`);
     return output;
-}
+  }
+);
