@@ -232,7 +232,7 @@ function ManualReframeTab() {
       if (!finalizeResult.success) throw new Error(finalizeResult.message);
       
       toast({ title: "IA detectando posición del orador..." });
-      const positionResult = await getSpeakerPosition({ publicUrl: videoInfo.publicUrl, contentType: videoFile.type });
+      const positionResult = await getSpeakerPosition({ gcsUri: videoInfo.gcsUri, contentType: videoFile.type });
       if (!positionResult.speaker) {
           throw new Error("La IA no pudo determinar la posición del orador principal.");
       }
