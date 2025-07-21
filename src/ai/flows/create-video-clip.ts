@@ -54,8 +54,8 @@ const CreateVideoClipOutputSchema = z.object({
 export type CreateVideoClipOutput = z.infer<typeof CreateVideoClipOutputSchema>;
 
 async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipOutput> {
-  const { videoUrl, clipStartTime, clipEndTime, clipTitle, transcription, speakers } = input;
-  let ffmpegCommand = 'Error: Command not generated.';
+  const { videoUrl, clipStartTime, clipEndTime, clipTitle, transcription } = input;
+  let allFfmpegCommands = 'Error: Command not generated.';
 
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'clip-processing-'));
   const originalVideoPath = path.join(tempDir, 'original.mp4');
@@ -86,48 +86,65 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
     const ih = 1080;
     const iw = 1920;
     const cropWidth = Math.floor(ih * 9 / 16);
+    const panDuration = 1.0; // Pan duration in seconds
+    const panHalf = panDuration / 2;
 
-    // Default crop position (centers the frame)
-    let lastCropX = (iw - cropWidth) / 2;
+    // Create a list of unique camera positions (keyframes) based on speaker changes.
+    const keyframes: { time: number; cropX: number }[] = [];
     if (relevantTranscription.length > 0) {
-        const firstSpeakerId = relevantTranscription[0].speakerId;
-        const firstSpeakerPos = speakerPositions.get(firstSpeakerId);
-        if (firstSpeakerPos) {
-            lastCropX = Math.max(0, Math.min(iw - cropWidth, Math.floor(firstSpeakerPos.x * iw - cropWidth / 2)));
+        for (const segment of relevantTranscription) {
+            const cropX = Math.max(0, Math.min(iw - cropWidth, Math.floor(segment.faceCoordinates.x * iw - cropWidth / 2)));
+            // Add keyframe if it's the first one or the position has changed significantly.
+            if (keyframes.length === 0 || Math.abs(cropX - keyframes[keyframes.length - 1].cropX) > 5) {
+                keyframes.push({ time: segment.startTime, cropX });
+            }
+        }
+        // If all segments are at the same position, ensure at least one keyframe exists.
+        if (keyframes.length === 0) {
+             const cropX = Math.max(0, Math.min(iw - cropWidth, Math.floor(relevantTranscription[0].faceCoordinates.x * iw - cropWidth / 2)));
+             keyframes.push({ time: relevantTranscription[0].startTime, cropX });
         }
     }
 
-    let cropXExpression = "";
-    // Build the nested if expression from the last segment to the first
-    for (let i = relevantTranscription.length - 1; i >= 0; i--) {
-        const segment = relevantTranscription[i];
-        const faceCoordinates = speakerPositions.get(segment.speakerId);
-        if (!faceCoordinates) continue;
-
-        const faceX_norm = faceCoordinates.x;
-        const cropX = Math.max(0, Math.min(iw - cropWidth, Math.floor(faceX_norm * iw - cropWidth / 2)));
-        
-        // For the last segment, this becomes the final 'else'
-        if (cropXExpression === "") {
-            cropXExpression = `${cropX}`;
-        } else {
-            cropXExpression = `if(between(t,${segment.startTime},${segment.endTime}),${cropX},${cropXExpression})`;
+    // Build the ffmpeg filter expression for smooth panning.
+    let x_expr: string;
+    if (keyframes.length <= 1) {
+        // If one or zero keyframes, the crop position is static.
+        const cropX = keyframes.length > 0 ? keyframes[0].cropX : (iw - cropWidth) / 2;
+        x_expr = `${cropX}`;
+    } else {
+        // Build a chained if-expression for the crop's x position.
+        // The expression is built backwards for correct ffmpeg filtergraph nesting.
+        let chained_expr = `${keyframes[keyframes.length - 1].cropX}`;
+        for (let i = keyframes.length - 2; i >= 0; i--) {
+            const curr = keyframes[i];
+            const next = keyframes[i + 1];
+            
+            const panStartTime = next.time - panHalf;
+            const lerp = `(${curr.cropX}+(t-${panStartTime})/${panDuration}*(${next.cropX}-${curr.cropX}))`;
+            
+            chained_expr = `if(lt(t,${panStartTime}),${curr.cropX},if(lt(t,${panStartTime}+${panDuration}),${lerp},${chained_expr}))`;
         }
-        lastCropX = cropX;
+        x_expr = chained_expr;
     }
-    // The very first segment defines the initial state before any other condition is met
-    cropXExpression = `if(between(t,${relevantTranscription[0].startTime},${relevantTranscription[0].endTime}),${lastCropX},${cropXExpression})`;
 
-    const videoFilter = `trim=${clipStartTime}:${clipEndTime},setpts=PTS-STARTPTS,crop=w=${cropWidth}:h=${ih}:x='${cropXExpression}',scale=1080:1920,setsar=1`;
-    const audioFilter = `atrim=${clipStartTime}:${clipEndTime},asetpts=PTS-STARTPTS`;
+    const clipDuration = clipEndTime - clipStartTime;
+    const tempVideoPath = path.join(tempDir, 'temp_video.mp4');
 
-    const fullFilterComplex = `[0:v]${videoFilter}[outv];[0:a]${audioFilter}[outa]`;
-
-    ffmpegCommand = `ffmpeg -y -i "${originalVideoPath}" -filter_complex "${fullFilterComplex}" -map "[outv]" -map "[outa]" -c:v libx264 -preset veryfast -c:a aac -shortest "${outputClipPath}"`;
+    // A single ffmpeg command to crop, pan, and scale the video. Audio is handled separately.
+    const videoProcessingCommand = `ffmpeg -y -ss ${clipStartTime} -t ${clipDuration} -i "${originalVideoPath}" -vf "crop=${cropWidth}:${ih}:x='${x_expr}':y=0,scale=1080:1920,setsar=1" -c:v libx264 -preset veryfast -an "${tempVideoPath}"`;
     
-    console.log('Processing video with a single robust command...');
-    console.log('Generated ffmpeg command:', ffmpegCommand);
-    execSync(ffmpegCommand, { stdio: 'inherit' });
+    console.log('Processing video with smooth panning...');
+    allFfmpegCommands = videoProcessingCommand + "\n\n";
+    execSync(videoProcessingCommand, { stdio: 'inherit' });
+
+    // Final command to mux the processed video with the original audio track.
+    // Using -c:v copy is efficient as the video is already encoded.
+    const finalCommand = `ffmpeg -y -i "${tempVideoPath}" -ss ${clipStartTime} -t ${clipDuration} -i "${originalVideoPath}" -c:v copy -c:a aac -map 0:v:0 -map 1:a:0 "${outputClipPath}"`;
+    console.log('Adding original audio to the final clip...');
+    allFfmpegCommands += finalCommand;
+    execSync(finalCommand, { stdio: 'inherit' });
+
 
     if (!fs.existsSync(outputClipPath)) {
         throw new Error("ffmpeg command did not produce an output file.");
