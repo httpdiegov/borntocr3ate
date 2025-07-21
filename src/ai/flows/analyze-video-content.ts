@@ -53,13 +53,7 @@ const AnalyzeVideoOutputSchema = z.object({
 export type AnalyzeVideoOutput = z.infer<typeof AnalyzeVideoOutputSchema>;
 
 
-export const analyzeVideoContent = ai.defineFlow(
-  {
-    name: 'analyzeVideoContentFlow',
-    inputSchema: AnalyzeVideoInputSchema,
-    outputSchema: AnalyzeVideoOutputSchema,
-  },
-  async (input) => {
+export async function analyzeVideoContent(input: AnalyzeVideoInput): Promise<AnalyzeVideoOutput> {
     console.log("Analizando video para identificar oradores, transcribir y encontrar clips...");
     
     const { output } = await ai.generate({
@@ -86,9 +80,14 @@ Devuelve toda esta información en el formato JSON solicitado.`},
         ]
     });
 
-    if (!output || !Array.isArray(output.clips)) {
+    if (!output) {
+        throw new Error("La IA no devolvió una respuesta válida.");
+    }
+    
+    if (!Array.isArray(output.clips)) {
         console.error("La respuesta de la IA no fue válida o no contenía clips:", output);
-        throw new Error("La IA no pudo generar ningún clip con el formato esperado.");
+        // Provide a default empty array for clips to prevent downstream errors.
+        output.clips = [];
     }
     
     // Sort clips by virality score descending
@@ -96,5 +95,4 @@ Devuelve toda esta información en el formato JSON solicitado.`},
 
     console.log(`Análisis completo. Se encontraron ${output.clips.length} clips y ${output.speakers.length} oradores.`);
     return output;
-  }
-);
+}
