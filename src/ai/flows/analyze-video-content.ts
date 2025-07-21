@@ -52,8 +52,12 @@ const AnalyzeVideoOutputSchema = z.object({
 });
 export type AnalyzeVideoOutput = z.infer<typeof AnalyzeVideoOutputSchema>;
 
+// Exported wrapper function to be called from the component
+export async function analyzeVideoContent(input: AnalyzeVideoInput): Promise<AnalyzeVideoOutput> {
+    return analyzeVideoContentFlow(input);
+}
 
-export const analyzeVideoContent = ai.defineFlow(
+const analyzeVideoContentFlow = ai.defineFlow(
   {
     name: 'analyzeVideoContentFlow',
     inputSchema: AnalyzeVideoInputSchema,
@@ -62,12 +66,12 @@ export const analyzeVideoContent = ai.defineFlow(
   async (input) => {
     console.log("Analizando video para identificar oradores, transcribir y encontrar clips...");
     
-    // Validation suggested by user to prevent the error
-    if (!input.gcsUri || typeof input.gcsUri !== 'string' || !input.gcsUri.startsWith("gs://")) {
-      throw new Error(`Invalid or empty input.gcsUri. Must be a valid GCS URI string. Received: ${input.gcsUri}`);
+    // Validation to prevent the error
+    if (!input || !input.gcsUri || typeof input.gcsUri !== 'string' || !input.gcsUri.startsWith("gs://")) {
+      throw new Error(`Invalid or empty input.gcsUri. Must be a valid GCS URI string. Received: ${input?.gcsUri}`);
     }
     if (!input.contentType || typeof input.contentType !== 'string') {
-      throw new Error(`Invalid or empty input.contentType. Must be a valid MIME type string. Received: ${input.contentType}`);
+      throw new Error(`Invalid or empty input.contentType. Must be a valid MIME type string. Received: ${input?.contentType}`);
     }
 
     const { output } = await ai.generate({
