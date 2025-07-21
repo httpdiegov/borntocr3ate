@@ -3,7 +3,7 @@
 
 /**
  * @fileOverview A flow for creating a vertical video clip from a larger video using ffmpeg.
- * This version uses a modern `filter_complex` with timeline support for efficient, single-pass processing.
+ * This version uses a robust "cut and concatenate" method for maximum compatibility.
  */
 
 import { z } from 'zod';
@@ -77,41 +77,47 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
       const duration = clipEndTime - clipStartTime;
       const cropFilter = "crop=w=ih*9/16:h=ih:x=(iw-ih*9/16)/2:y=0,scale=1080:1920,setsar=1";
       finalFfmpegCommand = `ffmpeg -y -i "${originalVideoPath}" -ss ${clipStartTime} -t ${duration} -vf "${cropFilter}" -c:v libx264 -preset veryfast -c:a aac "${outputClipPath}"`;
+      console.log(`Executing FFmpeg command: ${finalFfmpegCommand}`);
+      execSync(finalFfmpegCommand);
     } else {
-        const cropFilters: string[] = [];
-        clipTranscription.forEach((segment, index) => {
-            const speaker = speakers.find(s => s.id === segment.speakerId);
-            let x_expr: string;
-            switch (speaker?.position) {
-                case 'izquierda':
-                    x_expr = 'iw*0.25 - (ih*9/16)/2'; // Center of the left half
-                    break;
-                case 'derecha':
-                    x_expr = 'iw*0.75 - (ih*9/16)/2'; // Center of the right half
-                    break;
-                case 'centro':
-                default:
-                    x_expr = '(iw-ih*9/16)/2'; // Center of the full video
-                    break;
-            }
-            // The `enable` option activates the filter only between the segment's start and end times relative to the clip's start.
-            const relativeStartTime = segment.startTime - clipStartTime;
-            const relativeEndTime = segment.endTime - clipStartTime;
-            cropFilters.push(`crop=w=ih*9/16:h=ih:x='${x_expr}':y=0:enable='between(t,${relativeStartTime},${relativeEndTime})'`);
-        });
+        const tempClips: string[] = [];
+        const concatListPath = path.join(tempDir, 'concat_list.txt');
 
-        // Chain all crop filters together, then scale the result.
-        const complexFilter = `${cropFilters.join(',')},scale=1080:1920,setsar=1`;
-        const duration = clipEndTime - clipStartTime;
+        for (let i = 0; i < clipTranscription.length; i++) {
+          const segment = clipTranscription[i];
+          const speaker = speakers.find(s => s.id === segment.speakerId);
+          let x_expr: string;
 
-        // The final command applies the filter complex. It seeks to the start time (-ss) before the input for accuracy,
-        // and uses -t to set the duration of the clip.
-        finalFfmpegCommand = `ffmpeg -y -ss ${clipStartTime} -i "${originalVideoPath}" -t ${duration} -filter_complex "${complexFilter}" -preset veryfast -c:a copy "${outputClipPath}"`;
+          switch (speaker?.position) {
+              case 'izquierda':
+                  x_expr = 'iw*0.25 - (ih*9/16)/2'; // Center of the left half
+                  break;
+              case 'derecha':
+                  x_expr = 'iw*0.75 - (ih*9/16)/2'; // Center of the right half
+                  break;
+              case 'centro':
+              default:
+                  x_expr = '(iw-ih*9/16)/2'; // Center of the full video
+                  break;
+          }
+
+          const tempClipPath = path.join(tempDir, `temp_clip_${i}.ts`);
+          const cropFilter = `crop=w=ih*9/16:h=ih:x=${x_expr}:y=0,scale=1080:1920,setsar=1`;
+          const duration = segment.endTime - segment.startTime;
+
+          const cutCommand = `ffmpeg -y -ss ${segment.startTime} -i "${originalVideoPath}" -t ${duration} -vf "${cropFilter}" -c:v libx264 -preset veryfast -c:a aac -f mpegts "${tempClipPath}"`;
+          
+          console.log(`Generating segment ${i}: ${cutCommand}`);
+          execSync(cutCommand);
+          tempClips.push(tempClipPath);
+          fs.appendFileSync(concatListPath, `file '${tempClipPath}'\n`);
+        }
+        
+        finalFfmpegCommand = `ffmpeg -y -f concat -safe 0 -i "${concatListPath}" -c copy "${outputClipPath}"`;
+        console.log(`Concatenating segments: ${finalFfmpegCommand}`);
+        execSync(finalFfmpegCommand);
     }
     
-    console.log(`Executing FFmpeg command: ${finalFfmpegCommand}`);
-    execSync(finalFfmpegCommand);
-
     if (!fs.existsSync(outputClipPath)) {
         throw new Error("ffmpeg command did not produce an output file.");
     }
