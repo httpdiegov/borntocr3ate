@@ -54,12 +54,20 @@ const AnalyzeVideoOutputSchema = z.object({
 export type AnalyzeVideoOutput = z.infer<typeof AnalyzeVideoOutputSchema>;
 
 
-const videoAnalysisPrompt = ai.definePrompt({
-    name: 'videoAnalysisPrompt',
-    model: googleAI.model('gemini-1.5-pro'),
-    input: { schema: AnalyzeVideoInputSchema },
-    output: { schema: AnalyzeVideoOutputSchema },
-    prompt: `Eres un experto en producción de video para redes sociales. Tu tarea es analizar el siguiente video para preparar la creación de clips verticales.
+const analyzeVideoContentFlow = ai.defineFlow(
+  {
+    name: 'analyzeVideoContentFlow',
+    inputSchema: AnalyzeVideoInputSchema,
+    outputSchema: AnalyzeVideoOutputSchema,
+  },
+  async (input) => {
+    console.log("Analizando video para identificar oradores, transcribir y encontrar clips...");
+    
+    const { output } = await ai.generate({
+        model: googleAI.model('gemini-1.5-pro'),
+        output: { schema: AnalyzeVideoOutputSchema },
+        prompt: [
+            { text: `Eres un experto en producción de video para redes sociales. Tu tarea es analizar el siguiente video para preparar la creación de clips verticales.
 
 Por favor, realiza las siguientes tareas en orden:
 
@@ -74,23 +82,10 @@ Por favor, realiza las siguientes tareas en orden:
     *   Identifica al orador principal del clip.
     *   Asígnale una puntuación de viralidad de 1 a 10.
 
-Devuelve toda esta información en el formato JSON solicitado.
-
-Video a analizar: {{media uri=gcsUri contentType=contentType}}
-`,
-});
-
-
-const analyzeVideoContentFlow = ai.defineFlow(
-  {
-    name: 'analyzeVideoContentFlow',
-    inputSchema: AnalyzeVideoInputSchema,
-    outputSchema: AnalyzeVideoOutputSchema,
-  },
-  async (input) => {
-    console.log("Analizando video para identificar oradores, transcribir y encontrar clips...");
-    
-    const { output } = await videoAnalysisPrompt(input);
+Devuelve toda esta información en el formato JSON solicitado.`},
+            { media: { uri: input.gcsUri, contentType: input.contentType } }
+        ]
+    });
 
     if (!output || !Array.isArray(output.clips)) {
         console.error("La respuesta de la IA no fue válida o no contenía clips:", output);
