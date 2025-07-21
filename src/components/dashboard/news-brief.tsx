@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useState } from "react";
 import { useFormStatus } from "react-dom";
 import { handleGenerateNewsBrief } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,12 @@ import {
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
-} from "@/components/ui/accordion"
+} from "@/components/ui/accordion";
+
+interface NewsState {
+  newsItems: { title: string; summary: string; }[] | null;
+  message: string;
+}
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -31,9 +36,16 @@ function SubmitButton() {
 }
 
 export default function NewsBrief({ className }: { className?: string }) {
-  const initialState = { newsItems: null, message: "" };
-  const [state, dispatch] = useActionState(handleGenerateNewsBrief, initialState);
-  const { pending } = useFormStatus();
+  const initialState: NewsState = { newsItems: null, message: "" };
+  const [state, setState] = useState<NewsState>(initialState);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleSubmit = async (formData: FormData) => {
+    setIsLoading(true);
+    const result = await handleGenerateNewsBrief(state, formData);
+    setState(result);
+    setIsLoading(false);
+  };
 
   return (
     <Card className={className}>
@@ -47,7 +59,7 @@ export default function NewsBrief({ className }: { className?: string }) {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form action={dispatch} className="space-y-4">
+        <form action={handleSubmit} className="space-y-4">
           <SubmitButton />
         </form>
         <div className="mt-6">
