@@ -53,7 +53,7 @@ const AnalyzeVideoOutputSchema = z.object({
 export type AnalyzeVideoOutput = z.infer<typeof AnalyzeVideoOutputSchema>;
 
 
-const analyzeVideoContentFlow = ai.defineFlow(
+export const analyzeVideoContent = ai.defineFlow(
   {
     name: 'analyzeVideoContentFlow',
     inputSchema: AnalyzeVideoInputSchema,
@@ -98,8 +98,3 @@ Devuelve toda esta información en el formato JSON solicitado.`},
     return output;
   }
 );
-
-
-export async function analyzeVideoContent(input: AnalyzeVideoInput): Promise<AnalyzeVideoOutput> {
-  return analyzeVideoContentFlow(input);
-}
