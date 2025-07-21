@@ -77,58 +77,68 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
     const relevantTranscription = transcription.filter(
         (seg) => seg.startTime < clipEndTime && seg.endTime > clipStartTime
     ).sort((a, b) => a.startTime - b.startTime);
-    
+
     if (relevantTranscription.length === 0) {
-      throw new Error("No transcription segments found in the specified time range to create a clip.");
-    }
-    
-    const segmentFilePaths: string[] = [];
-    allFfmpegCommands = "";
-
-    // This is the most robust formula to calculate the crop.
-    // It calculates the center of the crop based on the face's pixel position
-    // and then subtracts half the crop width to get the starting x coordinate.
-    // It's wrapped in max(0, min(...)) to prevent the crop from going out of bounds.
-    const cropX_expr_template = `max(0, min(iw - (ih*9/16), %FACE_X_NORM%*iw - (ih*9/16)/2))`;
-    
-    // Step 1: Create a cropped video part for each transcription segment (no audio)
-    for (const [index, segment] of relevantTranscription.entries()) {
-        const segmentStart = Math.max(segment.startTime, clipStartTime);
-        const segmentEnd = Math.min(segment.endTime, clipEndTime);
-        const duration = segmentEnd - segmentStart;
-        if (duration <= 0) continue;
-
-        const faceX_norm = segment.faceCoordinates.x;
-        const cropX_expr = cropX_expr_template.replace('%FACE_X_NORM%', faceX_norm.toString());
-        
-        const partPath = path.join(tempDir, `part_${index}.mp4`);
-        segmentFilePaths.push(partPath);
-
-        // Use a simple, clean ffmpeg command with the calculated numeric value for crop
-        const cropCommand = `ffmpeg -y -ss ${segmentStart} -i "${originalVideoPath}" -t ${duration} -vf "crop=ih*9/16:ih:${cropX_expr}:0,scale=1080:1920,setsar=1" -c:v libx264 -preset veryfast -an "${partPath}"`;
-        
-        console.log(`Creating segment ${index} (${segmentStart.toFixed(2)}s -> ${segmentEnd.toFixed(2)}s)`);
-        allFfmpegCommands += cropCommand + "\n\n";
-        execSync(cropCommand, { stdio: 'inherit' });
-    }
-    
-    if (segmentFilePaths.length === 0) {
-      throw new Error("No video segments could be created from the transcription.");
+        throw new Error("No transcription segments found in the specified time range to create a clip.");
     }
 
-    // Step 2: Concatenate all video parts
-    const concatListPath = path.join(tempDir, 'concat-list.txt');
-    const fileListContent = segmentFilePaths.map(p => `file '${p.replace(/\\/g, '/')}'`).join('\n');
-    fs.writeFileSync(concatListPath, fileListContent);
+    const ih = 1080; // Video height
+    const iw = 1920; // Video width
+    const cropWidth = Math.floor(ih * 9 / 16);
+    const panDuration = 1.0; // Pan duration in seconds
+    const panHalf = panDuration / 2;
 
-    const tempVideoPath = path.join(tempDir, 'temp_video.mp4');
-    const concatCommand = `ffmpeg -y -f concat -safe 0 -i "${concatListPath}" -c copy "${tempVideoPath}"`;
-    console.log('Concatenating video segments...');
-    allFfmpegCommands += concatCommand + "\n\n";
-    execSync(concatCommand, { stdio: 'inherit' });
+    // Create a list of unique camera positions (keyframes) based on speaker changes.
+    const keyframes: { time: number; cropX: number }[] = [];
+    if (relevantTranscription.length > 0) {
+        for (const segment of relevantTranscription) {
+            const cropX = Math.max(0, Math.min(iw - cropWidth, Math.floor(segment.faceCoordinates.x * iw - cropWidth / 2)));
+            // Add keyframe if it's the first one or the position has changed significantly.
+            if (keyframes.length === 0 || Math.abs(cropX - keyframes[keyframes.length - 1].cropX) > 5) {
+                keyframes.push({ time: segment.startTime, cropX });
+            }
+        }
+        // If all segments are at the same position, ensure at least one keyframe exists.
+        if (keyframes.length === 0) {
+             const cropX = Math.max(0, Math.min(iw - cropWidth, Math.floor(relevantTranscription[0].faceCoordinates.x * iw - cropWidth / 2)));
+             keyframes.push({ time: relevantTranscription[0].startTime, cropX });
+        }
+    }
 
-    // Step 3: Extract the original audio for the full clip duration and add it to the concatenated video
+    // Build the ffmpeg filter expression for smooth panning.
+    let x_expr: string;
+    if (keyframes.length <= 1) {
+        // If one or zero keyframes, the crop position is static.
+        const cropX = keyframes.length > 0 ? keyframes[0].cropX : (iw - cropWidth) / 2;
+        x_expr = `${cropX}`;
+    } else {
+        // Build a chained if-expression for the crop's x position.
+        // The expression is built backwards for correct ffmpeg filtergraph nesting.
+        let chained_expr = `${keyframes[keyframes.length - 1].cropX}`;
+        for (let i = keyframes.length - 2; i >= 0; i--) {
+            const curr = keyframes[i];
+            const next = keyframes[i + 1];
+            
+            const panStartTime = next.time - panHalf;
+            const lerp = `(${curr.cropX}+(t-${panStartTime})/${panDuration}*(${next.cropX}-${curr.cropX}))`;
+            
+            chained_expr = `if(lt(t,${panStartTime}),${curr.cropX},if(lt(t,${panStartTime}+${panDuration}),${lerp},${chained_expr}))`;
+        }
+        x_expr = chained_expr;
+    }
+
     const clipDuration = clipEndTime - clipStartTime;
+    const tempVideoPath = path.join(tempDir, 'temp_video.mp4');
+
+    // A single ffmpeg command to crop, pan, and scale the video. Audio is handled separately.
+    const videoProcessingCommand = `ffmpeg -y -ss ${clipStartTime} -t ${clipDuration} -i "${originalVideoPath}" -vf "crop=${cropWidth}:${ih}:x='${x_expr}':y=0,scale=1080:1920,setsar=1" -c:v libx264 -preset veryfast -an "${tempVideoPath}"`;
+    
+    console.log('Processing video with smooth panning...');
+    allFfmpegCommands = videoProcessingCommand + "\n\n";
+    execSync(videoProcessingCommand, { stdio: 'inherit' });
+
+    // Final command to mux the processed video with the original audio track.
+    // Using -c:v copy is efficient as the video is already encoded.
     const finalCommand = `ffmpeg -y -i "${tempVideoPath}" -ss ${clipStartTime} -t ${clipDuration} -i "${originalVideoPath}" -c:v copy -c:a aac -map 0:v:0 -map 1:a:0 "${outputClipPath}"`;
     console.log('Adding original audio to the final clip...');
     allFfmpegCommands += finalCommand;
