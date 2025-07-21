@@ -88,7 +88,7 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
     if (relevantTranscription.length === 0) {
       console.warn("No transcription segments found for dynamic cropping. Defaulting to a simple center crop.");
       const clipDuration = clipEndTime - clipStartTime;
-      const cropFilter = "crop=w=ih*9/16:h=ih:x=(iw-ih*9/16)/2:y=0,scale=1080:1920,setsar=1";
+      const cropFilter = `crop=w=ih*9/16:h=ih:x=(iw-ih*9/16)/2:y=0,scale=1080:1920,setsar=1`;
       finalFfmpegCommand = `ffmpeg -y -ss ${clipStartTime} -i "${originalVideoPath}" -t ${clipDuration} -vf "${cropFilter}" -c:v libx264 -preset veryfast -c:a aac "${outputClipPath}"`;
       execSync(finalFfmpegCommand);
 
