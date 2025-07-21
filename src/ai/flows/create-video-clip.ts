@@ -3,7 +3,7 @@
 
 /**
  * @fileOverview A flow for creating a vertical video clip from a larger video using ffmpeg.
- * This version uses a robust "cut and concatenate" method to ensure compatibility.
+ * This version uses a robust "cut and concatenate" method to ensure compatibility and natural timing.
  */
 
 import { z } from 'zod';
@@ -47,6 +47,12 @@ const CreateVideoClipOutputSchema = z.object({
 });
 export type CreateVideoClipOutput = z.infer<typeof CreateVideoClipOutputSchema>;
 
+type Shot = {
+    startTime: number;
+    endTime: number;
+    speakerId: string;
+};
+
 
 async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipOutput> {
   const { videoUrl, clipStartTime, clipEndTime, clipTitle, speakers, transcription } = input;
@@ -68,11 +74,11 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
     fs.writeFileSync(originalVideoPath, Buffer.from(videoBuffer));
     console.log(`Video downloaded to ${originalVideoPath}`);
 
-    const clipTranscription = transcription.filter(
-        (seg) => seg.startTime >= clipStartTime && seg.endTime <= clipEndTime && seg.endTime > seg.startTime
-    );
+    const relevantTranscription = transcription.filter(
+        (seg) => seg.startTime < clipEndTime && seg.endTime > clipStartTime
+    ).sort((a, b) => a.startTime - b.startTime);
     
-    if (clipTranscription.length === 0) {
+    if (relevantTranscription.length === 0) {
       console.warn("No transcription segments found for dynamic cropping. Defaulting to a simple center crop.");
       const clipDuration = clipEndTime - clipStartTime;
       const cropFilter = "crop=w=ih*9/16:h=ih:x=(iw-ih*9/16)/2:y=0,scale=1080:1920,setsar=1";
@@ -80,12 +86,50 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
       execSync(finalFfmpegCommand);
 
     } else {
+        const shots: Shot[] = [];
+        let lastSpeakerId = relevantTranscription[0].speakerId;
+        let lastEndTime = clipStartTime;
+
+        for (const segment of relevantTranscription) {
+            const segmentStart = Math.max(segment.startTime, clipStartTime);
+            
+            // If there's a silence gap, create a shot for it with the last speaker.
+            if (segmentStart > lastEndTime) {
+                shots.push({
+                    startTime: lastEndTime,
+                    endTime: segmentStart,
+                    speakerId: lastSpeakerId,
+                });
+            }
+            
+            shots.push({
+                startTime: segmentStart,
+                endTime: Math.min(segment.endTime, clipEndTime),
+                speakerId: segment.speakerId,
+            });
+            
+            lastEndTime = Math.min(segment.endTime, clipEndTime);
+            lastSpeakerId = segment.speakerId;
+        }
+
+        // If the last segment doesn't reach the end of the clip, add a final shot.
+        if (lastEndTime < clipEndTime) {
+            shots.push({
+                startTime: lastEndTime,
+                endTime: clipEndTime,
+                speakerId: lastSpeakerId,
+            });
+        }
+        
         const intermediateFiles: string[] = [];
         const concatFilePath = path.join(tempDir, 'concat.txt');
         
-        for (let i = 0; i < clipTranscription.length; i++) {
-            const segment = clipTranscription[i];
-            const speaker = speakers.find(s => s.id === segment.speakerId);
+        for (let i = 0; i < shots.length; i++) {
+            const shot = shots[i];
+            // Skip zero-duration shots
+            if (shot.endTime <= shot.startTime) continue;
+
+            const speaker = speakers.find(s => s.id === shot.speakerId);
             let x_expr: string;
 
             switch (speaker?.position) {
@@ -101,18 +145,22 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
                     break;
             }
 
-            const segmentStartTime = segment.startTime;
-            const segmentDuration = segment.endTime - segment.startTime;
+            const shotStartTime = shot.startTime;
+            const shotDuration = shot.endTime - shot.startTime;
             const intermediateFilePath = path.join(tempDir, `part_${i}.mp4`);
             intermediateFiles.push(intermediateFilePath);
 
             const cropFilter = `crop=w=ih*9/16:h=ih:x=${x_expr}:y=0,scale=1080:1920,setsar=1`;
             
-            const segmentCommand = `ffmpeg -y -ss ${segmentStartTime} -i "${originalVideoPath}" -t ${segmentDuration} -vf "${cropFilter}" -c:v libx264 -preset veryfast -c:a aac "${intermediateFilePath}"`;
-            console.log(`Creating segment ${i}: ${segmentCommand}`);
+            const segmentCommand = `ffmpeg -y -ss ${shotStartTime} -i "${originalVideoPath}" -t ${shotDuration} -vf "${cropFilter}" -c:v libx264 -preset veryfast -c:a aac "${intermediateFilePath}"`;
+            console.log(`Creating segment ${i} (${formatTimestamp(shotStartTime)} -> ${formatTimestamp(shot.endTime)}): ${segmentCommand}`);
             execSync(segmentCommand);
             
-            fs.appendFileSync(concatFilePath, `file '${intermediateFilePath}'\n`);
+            fs.appendFileSync(concatFilePath, `file '${intermediateFilePath.replace(/\\/g, '/')}'\n`);
+        }
+        
+        if (intermediateFiles.length === 0) {
+            throw new Error("No video segments could be generated from the shots.");
         }
 
         finalFfmpegCommand = `ffmpeg -y -f concat -safe 0 -i "${concatFilePath}" -c copy "${outputClipPath}"`;
@@ -139,6 +187,12 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
+}
+
+function formatTimestamp(seconds: number) {
+    const mins = Math.floor(seconds / 60);
+    const secs = (seconds % 60).toFixed(2);
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(5, '0')}`;
 }
 
 export const createVideoClip = ai.defineFlow(
