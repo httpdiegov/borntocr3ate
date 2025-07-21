@@ -85,14 +85,15 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
         (seg) => seg.startTime < clipEndTime && seg.endTime > clipStartTime
     ).sort((a, b) => a.startTime - b.startTime);
     
+    // Fallback to simple center crop if no transcription is available
     if (relevantTranscription.length === 0) {
       console.warn("No transcription segments found for dynamic cropping. Defaulting to a simple center crop.");
       const clipDuration = clipEndTime - clipStartTime;
       const cropFilter = `crop=w=ih*9/16:h=ih:x=(iw-ih*9/16)/2:y=0,scale=1080:1920,setsar=1`;
       finalFfmpegCommand = `ffmpeg -y -ss ${clipStartTime} -i "${originalVideoPath}" -t ${clipDuration} -vf "${cropFilter}" -c:v libx264 -preset veryfast -c:a aac "${outputClipPath}"`;
       execSync(finalFfmpegCommand);
-
     } else {
+        // Build shots timeline including silences
         const shots: Shot[] = [];
         let lastKnownCoords = relevantTranscription[0].faceCoordinates;
         let lastSpeakerId = relevantTranscription[0].speakerId;
@@ -101,6 +102,7 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
         for (const segment of relevantTranscription) {
             const segmentStart = Math.max(segment.startTime, clipStartTime);
             
+            // Fill gap (silence) with previous speaker's coordinates
             if (segmentStart > lastEndTime) {
                 shots.push({
                     startTime: lastEndTime,
@@ -110,6 +112,7 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
                 });
             }
             
+            // Add current segment
             shots.push({
                 startTime: segmentStart,
                 endTime: Math.min(segment.endTime, clipEndTime),
@@ -122,6 +125,7 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
             lastKnownCoords = segment.faceCoordinates;
         }
 
+        // Fill final gap until the end of the clip
         if (lastEndTime < clipEndTime) {
             shots.push({
                 startTime: lastEndTime,
@@ -134,6 +138,7 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
         const intermediateFiles: string[] = [];
         const concatFilePath = path.join(tempDir, 'concat.txt');
         
+        // Create silent video parts
         for (let i = 0; i < shots.length; i++) {
             const shot = shots[i];
             if (shot.endTime <= shot.startTime) continue;
@@ -146,9 +151,11 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
             const intermediateFilePath = path.join(tempDir, `part_${i}.mp4`);
             intermediateFiles.push(intermediateFilePath);
 
-            const cropFilter = `crop=w=ih*9/16:h=ih:x=${x_expr}:y=0,scale=1080:1920,setsar=1`;
+            // Robust filter string
+            const cropFilter = `crop=w=ih*9/16:h=ih:x='${x_expr}':y=0`;
+            const scaleFilter = `scale=1080:1920,setsar=1`;
             
-            const segmentCommand = `ffmpeg -y -ss ${shotStartTime} -i "${originalVideoPath}" -t ${shotDuration} -vf "${cropFilter}" -an "${intermediateFilePath}"`;
+            const segmentCommand = `ffmpeg -y -ss ${shotStartTime} -i "${originalVideoPath}" -t ${shotDuration} -vf "${cropFilter},${scaleFilter}" -an "${intermediateFilePath}"`;
             console.log(`Creating segment ${i} (${formatTimestamp(shotStartTime)} -> ${formatTimestamp(shot.endTime)}): ${segmentCommand}`);
             execSync(segmentCommand);
             
@@ -159,16 +166,19 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
             throw new Error("No video segments could be generated from the shots.");
         }
         
+        // Concatenate all silent video parts
         const videoConcatCommand = `ffmpeg -y -f concat -safe 0 -i "${concatFilePath}" -c copy "${path.join(tempDir, 'video_only.mp4')}"`;
         console.log(`Concatenating video segments: ${videoConcatCommand}`);
         execSync(videoConcatCommand);
 
+        // Extract the full audio for the clip duration
         const audioStartTime = clipStartTime;
         const audioDuration = clipEndTime - clipStartTime;
         const audioExtractCommand = `ffmpeg -y -ss ${audioStartTime} -i "${originalVideoPath}" -t ${audioDuration} -vn -c:a aac "${path.join(tempDir, 'audio.aac')}"`;
         console.log(`Extracting audio: ${audioExtractCommand}`);
         execSync(audioExtractCommand);
         
+        // Combine concatenated video with the extracted audio
         finalFfmpegCommand = `ffmpeg -y -i "${path.join(tempDir, 'video_only.mp4')}" -i "${path.join(tempDir, 'audio.aac')}" -c:v copy -c:a aac "${outputClipPath}"`;
         console.log(`Combining video and audio: ${finalFfmpegCommand}`);
         execSync(finalFfmpegCommand);
@@ -210,4 +220,3 @@ export const createVideoClip = ai.defineFlow(
     createClip
 );
 
-    
