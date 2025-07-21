@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Film, Bot, Loader2, Scissors, User, Clock, Wand, Settings, CheckCircle, AlertTriangle } from "lucide-react";
-import { analyzeVideoContent, type AnalyzedClip, type Speaker } from "@/ai/flows/analyze-video-content";
+import { analyzeVideoContent, type AnalyzedClip, type Speaker, type TranscriptionSegment } from "@/ai/flows/analyze-video-content";
 import { generateUploadUrl, type GenerateUploadUrlOutput } from "@/ai/flows/generate-upload-url";
 import { finalizeUpload } from "@/ai/flows/finalize-upload";
 import { createVideoClip } from "@/ai/flows/create-video-clip";
@@ -34,6 +34,7 @@ const formatTimestamp = (seconds: number) => {
 type AnalysisState = {
   clips: AnalyzedClip[];
   speakers: Speaker[];
+  transcription: TranscriptionSegment[];
   videoInfo: GenerateUploadUrlOutput;
 };
 
@@ -88,7 +89,7 @@ function SmartClipperTab() {
       setIsAnalyzing(true);
       toast({ title: "Comenzando análisis...", description: "La IA está procesando el video. Esto puede tomar varios minutos." });
       const result = await analyzeVideoContent({ publicUrl: videoInfo.publicUrl, contentType: videoFile.type });
-      setAnalysisResult({ clips: result.clips, speakers: result.speakers, videoInfo });
+      setAnalysisResult({ ...result, videoInfo });
       toast({ title: "Análisis completo!", description: `Se encontraron ${result.clips.length} clips potenciales.` });
     } catch (error: any) {
       console.error("Error during video processing:", error);
@@ -101,16 +102,19 @@ function SmartClipperTab() {
 
   const handleCreateClip = async (clip: AnalyzedClip) => {
     if (!analysisResult) return;
-    const speaker = analysisResult.speakers.find(s => s.id === clip.mainSpeakerId);
-    if (!speaker) {
-      toast({ title: "Error", description: "Speaker not found for this clip.", variant: "destructive" });
-      return;
-    }
     setClipProcessingState(prev => ({ ...prev, [clip.id]: { isLoading: true } }));
-    toast({ title: "Creando clip...", description: "Esto puede tardar un momento. Requiere ffmpeg instalado localmente." });
+    toast({ title: "Creando clip dinámico...", description: "Esto puede tardar un momento. Requiere ffmpeg instalado." });
 
     try {
-      const result = await createVideoClip({ videoUrl: analysisResult.videoInfo.publicUrl, startTime: clip.startTime, endTime: clip.endTime, speaker: speaker, clipTitle: clip.title });
+      const result = await createVideoClip({ 
+          videoUrl: analysisResult.videoInfo.publicUrl, 
+          clipStartTime: clip.startTime, 
+          clipEndTime: clip.endTime, 
+          clipTitle: clip.title,
+          speakers: analysisResult.speakers,
+          transcription: analysisResult.transcription,
+      });
+
       if (result.success && result.filePath) {
         setClipProcessingState(prev => ({ ...prev, [clip.id]: { isLoading: false, resultPath: result.filePath, ffmpegCommand: result.ffmpegCommand } }));
         toast({ title: "¡Clip Guardado!", description: `El clip se ha guardado en: ${result.filePath}` });
@@ -159,11 +163,11 @@ function SmartClipperTab() {
                     </Badge>
                   </div>
                   <p className="text-sm text-muted-foreground break-words w-full">{clip.summary}</p>
-                  {speaker && <Badge variant="outline"><User className="h-3 w-3 mr-1.5" />Enfocar en: {speaker.description} ({speaker.position})</Badge>}
+                  {speaker && <Badge variant="outline"><User className="h-3 w-3 mr-1.5" />Orador Principal: {speaker.description}</Badge>}
                   <div className="flex gap-2 pt-2">
                     <Button size="sm" variant="outline" className="w-full" disabled={clipState.isLoading || !!clipState.resultPath} onClick={() => handleCreateClip(clip)}>
                       {clipState.isLoading ? <Loader2 className="animate-spin mr-2" /> : (clipState.resultPath ? <CheckCircle className="mr-2 h-4 w-4 text-green-500" /> : <Scissors className="mr-2 h-4 w-4" />)}
-                      {clipState.isLoading ? "Procesando..." : (clipState.resultPath ? "¡Guardado!" : "Crear Clip con FFMPEG")}
+                      {clipState.isLoading ? "Procesando..." : (clipState.resultPath ? "¡Guardado!" : "Crear Clip Dinámico")}
                     </Button>
                   </div>
                   {clipState.resultPath && (
@@ -237,15 +241,13 @@ function ManualReframeTab() {
         throw new Error("La IA no pudo identificar a ningún orador en el video.");
       }
       
-      const mainSpeaker = analysisResult.speakers[0];
-      toast({ title: "Orador detectado", description: `Enfocando en: ${mainSpeaker.description} (${mainSpeaker.position})`});
-
-      toast({ title: "Reencuadrando clip..." });
+      toast({ title: "Reencuadrando clip dinámicamente..." });
       const clipResult = await createVideoClip({
         videoUrl: videoInfo.publicUrl,
-        startTime: 0,
-        endTime: 9999, // Process the whole clip
-        speaker: mainSpeaker,
+        clipStartTime: 0,
+        clipEndTime: 9999, // Process the whole clip by setting a very high end time
+        speakers: analysisResult.speakers,
+        transcription: analysisResult.transcription,
         clipTitle: `reframed_${videoFile.name}`
       });
 
@@ -272,7 +274,7 @@ function ManualReframeTab() {
 
       <Button onClick={handleReframe} className="w-full" disabled={!videoFile || isLoading}>
         {isLoading ? <Loader2 className="animate-spin mr-2" /> : <Scissors className="mr-2" />}
-        {isLoading ? "Procesando..." : "Test: Reencuadrar Clip Automáticamente"}
+        {isLoading ? "Procesando..." : "Reencuadrar Clip Automáticamente"}
       </Button>
 
       {isLoading && (

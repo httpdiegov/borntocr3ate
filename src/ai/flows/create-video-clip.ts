@@ -3,6 +3,7 @@
 
 /**
  * @fileOverview A flow for creating a vertical video clip from a larger video using ffmpeg.
+ * Now includes dynamic cropping based on transcription segments.
  */
 
 import { z } from 'zod';
@@ -19,12 +20,19 @@ const SpeakerSchema = z.object({
   position: z.enum(['izquierda', 'derecha', 'centro', 'desconocido']).describe('The speaker\'s general position in the frame.'),
 });
 
+const TranscriptionSegmentSchema = z.object({
+    speakerId: z.string(),
+    startTime: z.number(),
+    endTime: z.number(),
+});
+
 const CreateVideoClipInputSchema = z.object({
   videoUrl: z.string().url().describe('The public URL of the original horizontal video.'),
-  startTime: z.number().describe('Start time of the clip in seconds.'),
-  endTime: z.number().describe('End time of the clip in seconds.'),
-  speaker: SpeakerSchema.describe('The speaker to focus on for the clip.'),
-  clipTitle: z.string().describe('The title of the clip, used for the output filename.')
+  clipStartTime: z.number().describe('Start time of the clip in seconds.'),
+  clipEndTime: z.number().describe('End time of the clip in seconds.'),
+  clipTitle: z.string().describe('The title of the clip, used for the output filename.'),
+  speakers: z.array(SpeakerSchema).describe('List of all speakers identified in the video.'),
+  transcription: z.array(TranscriptionSegmentSchema).describe('Transcription segments with speaker IDs and timings.'),
 });
 export type CreateVideoClipInput = z.infer<typeof CreateVideoClipInputSchema>;
 
@@ -38,21 +46,18 @@ export type CreateVideoClipOutput = z.infer<typeof CreateVideoClipOutputSchema>;
 
 
 async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipOutput> {
-  const { videoUrl, startTime, endTime, clipTitle, speaker } = input;
+  const { videoUrl, clipStartTime, clipEndTime, clipTitle, speakers, transcription } = input;
   let ffmpegCommand = 'Error: Command not generated.';
 
-  // Create a unique temporary directory for this operation
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'clip-processing-'));
   const originalVideoPath = path.join(tempDir, 'original.mp4');
   
-  // Define the final output directory and path
   const videosDir = path.join(process.cwd(), 'videos');
   fs.mkdirSync(videosDir, { recursive: true });
   const safeClipTitle = clipTitle.replace(/[^a-zA-Z0-9_-]/g, '_');
   const outputClipPath = path.join(videosDir, `${safeClipTitle}.mp4`);
   
   try {
-    // 1. Download the original video file
     console.log(`Downloading video from ${videoUrl}`);
     const response = await fetch(videoUrl);
     if (!response.ok) throw new Error(`Failed to download video: ${response.statusText}`);
@@ -60,31 +65,56 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
     fs.writeFileSync(originalVideoPath, Buffer.from(videoBuffer));
     console.log(`Video downloaded to ${originalVideoPath}`);
 
-    // 2. Construct the ffmpeg command with improved static cropping
-    const duration = endTime - startTime;
-    // Crop to 9:16 aspect ratio based on speaker position
-    let cropFilter: string;
-    switch (speaker.position) {
-      case 'izquierda':
-        // Crop the left 56.25% of the video (9/16)
-        cropFilter = 'crop=ih*9/16:ih:0:0';
-        break;
-      case 'derecha':
-        // Crop the right 56.25% of the video
-        cropFilter = 'crop=ih*9/16:ih:iw-ih*9/16:0';
-        break;
-      case 'centro':
-      default:
-        // Crop the center
-        cropFilter = 'crop=ih*9/16:ih:(iw-ih*9/16)/2:0';
-        break;
-    }
-    
-    // Command to cut the clip, apply the crop, and scale to 1080x1920
-    ffmpegCommand = `ffmpeg -y -ss ${startTime} -i "${originalVideoPath}" -t ${duration} -vf "${cropFilter},scale=1080:1920" -c:a copy "${outputClipPath}"`;
-    console.log(`Generated ffmpeg command: ${ffmpegCommand}`);
+    const duration = clipEndTime - clipStartTime;
 
-    // 3. Execute the ffmpeg command
+    // Filter transcription to only include segments within our clip's timeframe
+    const clipTranscription = transcription.filter(
+        (seg) => seg.startTime >= clipStartTime && seg.endTime <= clipEndTime
+    );
+
+    // Generate the complex filtergraph for dynamic cropping
+    let complexFilter = "";
+    clipTranscription.forEach((segment, index) => {
+        const speaker = speakers.find(s => s.id === segment.speakerId);
+        if (!speaker) return;
+
+        const segmentStartTime = segment.startTime - clipStartTime; // Time relative to the clip start
+        const segmentEndTime = segment.endTime - clipStartTime;
+
+        let crop_x: string;
+        // Center the 9:16 crop on the speaker
+        switch (speaker.position) {
+            case 'izquierda':
+                crop_x = 'iw*0.25 - (ih*9/16)/2'; // Center of the left half
+                break;
+            case 'derecha':
+                crop_x = 'iw*0.75 - (ih*9/16)/2'; // Center of the right half
+                break;
+            case 'centro':
+            default:
+                crop_x = '(iw-ih*9/16)/2'; // Center of the full video
+                break;
+        }
+
+        // Apply a subtle zoom and pan to keep the face centered
+        // Zooms in to 1.1x over 4 seconds, then stays there.
+        const zoom = "1.1";
+        const pan_duration = 4;
+        const pan_x = `'(iw/2) - (iw/2)/${zoom}'`;
+        const pan_y = `'(ih/2) - (ih/2)/${zoom}'`;
+
+        // We build a chain of filters. Each segment gets its own crop.
+        complexFilter += `[0:v]trim=${segmentStartTime}:${segmentEndTime},setpts=PTS-STARTPTS,crop=ih*9/16:ih:x=${crop_x},zoompan=z='min(zoom+0.0015,${zoom})':d=1:x=${pan_x}:y=${pan_y}:s=1080x1920,setpts=PTS-STARTPTS[v${index}]; `;
+    });
+
+    const concatInputs = clipTranscription.map((_, index) => `[v${index}]`).join('');
+    complexFilter += `${concatInputs}concat=n=${clipTranscription.length}:v=1:a=0[v_out]`;
+    
+    // Command to cut the main audio and combine it with the dynamically cropped video
+    ffmpegCommand = `ffmpeg -y -i "${originalVideoPath}" -ss ${clipStartTime} -t ${duration} -filter_complex "${complexFilter}" -map "[v_out]" -map 0:a? -c:a copy "${outputClipPath}"`;
+    
+    console.log(`Generated dynamic ffmpeg command: ${ffmpegCommand}`);
+
     execSync(ffmpegCommand);
 
     if (!fs.existsSync(outputClipPath)) {
@@ -101,9 +131,10 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
 
   } catch (error: any) {
     console.error('Failed to create video clip:', error);
-    return { success: false, message: `Failed to create clip: ${error.message}`, ffmpegCommand };
+    // Include stderr in the error message if available
+    const errorMessage = error.stderr ? error.stderr.toString() : error.message;
+    return { success: false, message: `Failed to create clip: ${errorMessage}`, ffmpegCommand };
   } finally {
-    // Clean up temporary directory
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 }

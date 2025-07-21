@@ -23,6 +23,8 @@ const TranscriptionSegmentSchema = z.object({
   startTime: z.number().describe('Start time of the segment in seconds.'),
   endTime: z.number().describe('End time of the segment in seconds.'),
 });
+export type TranscriptionSegment = z.infer<typeof TranscriptionSegmentSchema>;
+
 
 // Define the schema for the input of the flow
 const AnalyzeVideoInputSchema = z.object({
@@ -66,7 +68,6 @@ const analyzeVideoContentFlow = ai.defineFlow(
   async (input) => {
     console.log("Analizando video para identificar oradores, transcribir y encontrar clips...");
     
-    // Validation to prevent the error
     if (!input || !input.publicUrl || !input.publicUrl.startsWith("https://")) {
       throw new Error(`Invalid or empty input.publicUrl. Must be a valid HTTPS URL. Received: ${input?.publicUrl}`);
     }
@@ -82,9 +83,9 @@ const analyzeVideoContentFlow = ai.defineFlow(
 
 Por favor, realiza las siguientes tareas en orden:
 
-1.  **Identifica a los Oradores**: Observa a las personas en el video. Identifica a cada orador único. Para cada uno, crea un ID único (ej: "orador_1"), describe su apariencia y determina su posición en el cuadro (izquierda, derecha, centro).
+1.  **Identifica a los Oradores**: Observa a las personas en el video. Identifica a cada orador único. Para cada uno, crea un ID único (ej: "orador_1"), describe su apariencia y determina su posición general en el cuadro (izquierda, derecha, centro).
 
-2.  **Transcripción por Orador**: Transcribe todo el video. Divide la transcripción en segmentos, asignando a cada uno el ID del orador correspondiente y los tiempos de inicio y fin en segundos.
+2.  **Transcripción Detallada por Orador**: Transcribe todo el audio del video. Es crucial que dividas la transcripción en segmentos lógicos (frases o ideas cortas). Para cada segmento, asigna el ID del orador correspondiente, el texto exacto, y los tiempos de **inicio y fin** en segundos con la mayor precisión posible.
 
 3.  **Extracción de Clips Virales**: Basándote en la transcripción, identifica de 2 a 4 momentos con alto potencial viral (ganchos, declaraciones fuertes, consejos útiles). Para cada clip potencial:
     *   Crea un título corto y atractivo.
@@ -116,7 +117,7 @@ Devuelve toda esta información en el formato JSON solicitado.`},
     // Sort clips by virality score descending
     output.clips.sort((a: AnalyzedClip, b: AnalyzedClip) => b.viralityScore - a.viralityScore);
 
-    console.log(`Análisis completo. Se encontraron ${output.clips.length} clips y ${output.speakers.length} oradores.`);
+    console.log(`Análisis completo. Se encontraron ${output.clips.length} clips, ${output.speakers.length} oradores y ${output.transcription.length} segmentos de transcripción.`);
     return output;
   }
 );
