@@ -3,7 +3,7 @@
 
 /**
  * @fileOverview A flow for creating a vertical video clip from a larger video using ffmpeg.
- * This version uses a modern filter_complex with timeline expressions for dynamic cropping.
+ * This version uses a robust "cut and concatenate" method to ensure compatibility.
  */
 
 import { z } from 'zod';
@@ -68,19 +68,23 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
     fs.writeFileSync(originalVideoPath, Buffer.from(videoBuffer));
     console.log(`Video downloaded to ${originalVideoPath}`);
 
-    const clipDuration = clipEndTime - clipStartTime;
     const clipTranscription = transcription.filter(
         (seg) => seg.startTime >= clipStartTime && seg.endTime <= clipEndTime && seg.endTime > seg.startTime
     );
-
+    
     if (clipTranscription.length === 0) {
       console.warn("No transcription segments found for dynamic cropping. Defaulting to a simple center crop.");
+      const clipDuration = clipEndTime - clipStartTime;
       const cropFilter = "crop=w=ih*9/16:h=ih:x=(iw-ih*9/16)/2:y=0,scale=1080:1920,setsar=1";
       finalFfmpegCommand = `ffmpeg -y -ss ${clipStartTime} -i "${originalVideoPath}" -t ${clipDuration} -vf "${cropFilter}" -c:v libx264 -preset veryfast -c:a aac "${outputClipPath}"`;
-    
+      execSync(finalFfmpegCommand);
+
     } else {
-        const videoFilters: string[] = [];
-        clipTranscription.forEach((segment, index) => {
+        const intermediateFiles: string[] = [];
+        const concatFilePath = path.join(tempDir, 'concat.txt');
+        
+        for (let i = 0; i < clipTranscription.length; i++) {
+            const segment = clipTranscription[i];
             const speaker = speakers.find(s => s.id === segment.speakerId);
             let x_expr: string;
 
@@ -97,25 +101,25 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
                     break;
             }
 
-            // Adjust segment times to be relative to the clip's start time
-            const relativeStartTime = segment.startTime - clipStartTime;
-            const relativeEndTime = segment.endTime - clipStartTime;
+            const segmentStartTime = segment.startTime;
+            const segmentDuration = segment.endTime - segment.startTime;
+            const intermediateFilePath = path.join(tempDir, `part_${i}.mp4`);
+            intermediateFiles.push(intermediateFilePath);
+
+            const cropFilter = `crop=w=ih*9/16:h=ih:x=${x_expr}:y=0,scale=1080:1920,setsar=1`;
             
-            // Generate a crop filter that is only active during the segment's timeframe
-            const cropFilter = `crop=w=ih*9/16:h=ih:x=${x_expr}:y=0:enable='between(t,${relativeStartTime},${relativeEndTime})'`;
-            videoFilters.push(cropFilter);
-        });
+            const segmentCommand = `ffmpeg -y -ss ${segmentStartTime} -i "${originalVideoPath}" -t ${segmentDuration} -vf "${cropFilter}" -c:v libx264 -preset veryfast -c:a aac "${intermediateFilePath}"`;
+            console.log(`Creating segment ${i}: ${segmentCommand}`);
+            execSync(segmentCommand);
+            
+            fs.appendFileSync(concatFilePath, `file '${intermediateFilePath}'\n`);
+        }
 
-        // Chain all the timeline-enabled crop filters together
-        const complexFilter = videoFilters.join(',') + ",scale=1080:1920,setsar=1";
-
-        // The -ss parameter goes before -i for fast seeking. -t specifies the clip duration.
-        finalFfmpegCommand = `ffmpeg -y -ss ${clipStartTime} -i "${originalVideoPath}" -t ${clipDuration} -vf "${complexFilter}" -c:v libx264 -preset veryfast -c:a aac "${outputClipPath}"`;
+        finalFfmpegCommand = `ffmpeg -y -f concat -safe 0 -i "${concatFilePath}" -c copy "${outputClipPath}"`;
+        console.log(`Concatenating segments: ${finalFfmpegCommand}`);
+        execSync(finalFfmpegCommand);
     }
 
-    console.log(`Executing FFmpeg command: ${finalFfmpegCommand}`);
-    execSync(finalFfmpegCommand);
-    
     if (!fs.existsSync(outputClipPath)) {
         throw new Error("ffmpeg command did not produce an output file.");
     }
