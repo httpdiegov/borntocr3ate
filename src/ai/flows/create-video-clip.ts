@@ -53,21 +53,6 @@ const CreateVideoClipOutputSchema = z.object({
 });
 export type CreateVideoClipOutput = z.infer<typeof CreateVideoClipOutputSchema>;
 
-async function getVideoResolution(filePath: string): Promise<{ width: number; height: number }> {
-    try {
-        const command = `ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "${filePath}"`;
-        const output = execSync(command).toString().trim();
-        const [width, height] = output.split('x').map(Number);
-        if (!width || !height) throw new Error('Could not determine video resolution.');
-        console.log(`Video resolution determined: ${width}x${height}`);
-        return { width, height };
-    } catch (error) {
-        console.error("Error getting video resolution with ffprobe:", error);
-        throw new Error("Could not get video resolution. Is ffprobe installed and in your PATH?");
-    }
-}
-
-
 async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipOutput> {
   const { videoUrl, clipStartTime, clipEndTime, clipTitle, transcription } = input;
   let allFfmpegCommands = 'Error: Command not generated.';
@@ -88,9 +73,6 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
     fs.writeFileSync(originalVideoPath, Buffer.from(videoBuffer));
     console.log(`Video downloaded to ${originalVideoPath}`);
     
-    const { width: videoWidth, height: videoHeight } = await getVideoResolution(originalVideoPath);
-    const cropWidth = Math.floor(videoHeight * 9 / 16);
-
     const relevantTranscription = transcription.filter(
         (seg) => seg.startTime < clipEndTime && seg.endTime > clipStartTime
     ).sort((a, b) => a.startTime - b.startTime);
@@ -111,16 +93,18 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
 
         const faceX_norm = segment.faceCoordinates.x;
         // Perform calculations in TypeScript to get a final numeric value for cropX
-        const targetXCenter = faceX_norm * videoWidth;
-        const cropX = Math.round(Math.max(0, Math.min(videoWidth - cropWidth, targetXCenter - (cropWidth / 2))));
+        // This logic is designed for split-screen videos where speakers are in the left or right panels.
+        // It maps the faceX coordinate (0 to 1) to the active area of the screen.
+        // For a typical 16:9 video, the two 9:16 panels would be in the middle half.
+        const cropX_expr = `(iw/4) + (iw/2)*${faceX_norm} - (ih*9/32)`;
         
         const partPath = path.join(tempDir, `part_${index}.mp4`);
         segmentFilePaths.push(partPath);
 
         // Use a simple, clean ffmpeg command with the calculated numeric value for crop
-        const cropCommand = `ffmpeg -y -ss ${segmentStart} -i "${originalVideoPath}" -t ${duration} -vf "crop=${cropWidth}:${videoHeight}:${cropX}:0,scale=1080:1920,setsar=1" -c:v libx264 -preset veryfast -an "${partPath}"`;
+        const cropCommand = `ffmpeg -y -ss ${segmentStart} -i "${originalVideoPath}" -t ${duration} -vf "crop=ih*9/16:ih:${cropX_expr}:0,scale=1080:1920,setsar=1" -c:v libx264 -preset veryfast -an "${partPath}"`;
         
-        console.log(`Creating segment ${index} (${segmentStart.toFixed(2)}s -> ${segmentEnd.toFixed(2)}s) with cropX=${cropX}`);
+        console.log(`Creating segment ${index} (${segmentStart.toFixed(2)}s -> ${segmentEnd.toFixed(2)}s)`);
         allFfmpegCommands += cropCommand + "\n\n";
         execSync(cropCommand, { stdio: 'inherit' });
     }
