@@ -30,20 +30,6 @@ const GetSpeakerPositionOutputSchema = z.object({
 export type GetSpeakerPositionOutput = z.infer<typeof GetSpeakerPositionOutputSchema>;
 
 
-const speakerPositionPrompt = ai.definePrompt({
-    name: 'speakerPositionPrompt',
-    input: { schema: GetSpeakerPositionInputSchema },
-    output: { schema: GetSpeakerPositionOutputSchema },
-    model: googleAI.model('gemini-1.5-pro'),
-    prompt: `Eres un experto en análisis de video. Tu única tarea es identificar a la persona principal en el siguiente video y determinar su posición en el cuadro.
-
-Devuelve un solo objeto 'speaker' con un ID, una breve descripción y su posición ('izquierda', 'derecha', 'centro'). Si no hay una persona clara, devuelve un objeto vacío.
-
-Video a analizar: {{media uri=gcsUri contentType=contentType}}
-`,
-});
-
-
 const getSpeakerPositionFlow = ai.defineFlow(
   {
     name: 'getSpeakerPositionFlow',
@@ -53,8 +39,19 @@ const getSpeakerPositionFlow = ai.defineFlow(
   async (input) => {
     console.log("Analizando video para identificar posición del orador principal...");
     
-    const { output } = await speakerPositionPrompt(input);
+    const { output } = await ai.generate({
+      model: googleAI.model('gemini-1.5-pro'),
+      output: { schema: GetSpeakerPositionOutputSchema },
+      prompt: [
+        {text: `Eres un experto en análisis de video. Tu única tarea es identificar a la persona principal en el siguiente video y determinar su posición en el cuadro.
 
+Devuelve un solo objeto 'speaker' con un ID, una breve descripción y su posición ('izquierda', 'derecha', 'centro'). Si no hay una persona clara, devuelve un objeto vacío.
+
+Video a analizar:`},
+        {media: { url: input.gcsUri, contentType: input.contentType}}
+      ]
+    });
+    
     if (!output) {
         console.error("La respuesta de la IA no fue válida:", output);
         throw new Error("La IA no pudo determinar la posición del orador.");
