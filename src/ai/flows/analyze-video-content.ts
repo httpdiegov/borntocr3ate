@@ -1,4 +1,3 @@
-
 'use server';
 
 /**
@@ -9,26 +8,20 @@ import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 
 
-// Define the schema for a speaker identified in the video
+// Define the schema for a speaker identified in the video, now with a stable position
 const SpeakerSchema = z.object({
   id: z.string().describe('A unique identifier for the speaker (e.g., "orador_1").'),
   description: z.string().describe('A brief description of the speaker (e.g., "man with glasses on the left").'),
+  faceCoordinates: z.object({ x: z.number(), y: z.number() }).describe("The single, most representative (stable) position of the speaker's face throughout the video."),
 });
 export type Speaker = z.infer<typeof SpeakerSchema>;
 
-// Define schema for face coordinates
-const FaceCoordinatesSchema = z.object({
-  x: z.number().describe("The normalized horizontal coordinate (from 0.0 to 1.0) of the center of the speaker's face."),
-  y: z.number().describe("The normalized vertical coordinate (from 0.0 to 1.0) of the center of the speaker's face."),
-}).describe("The precise coordinates of the speaker's face in the frame for this segment.");
-
-// Define the schema for a segment of the transcription, now required for dynamic cropping
+// Define the schema for a segment of the transcription, now simplified
 const TranscriptionSegmentSchema = z.object({
   speakerId: z.string().describe('The ID of the speaker for this segment.'),
   text: z.string().describe('The transcribed text.'),
   startTime: z.number().describe('Start time of the segment in seconds with high precision.'),
   endTime: z.number().describe('End time of the segment in seconds with high precision.'),
-  faceCoordinates: FaceCoordinatesSchema,
 });
 export type TranscriptionSegment = z.infer<typeof TranscriptionSegmentSchema>;
 
@@ -86,26 +79,7 @@ const analyzeVideoContentFlow = ai.defineFlow(
         model: 'googleai/gemini-1.5-pro',
         output: { schema: AnalyzeVideoOutputSchema },
         prompt: [
-            { text: `Eres un experto director y editor de video para redes sociales. Tu tarea es analizar el siguiente video para preparar la creación de clips verticales con enfoque automático.
-
-Por favor, realiza las siguientes tareas en orden:
-
-1.  **Identifica a los Oradores**: Observa a las personas en el video. Identifica a cada orador único. Para cada uno, crea un ID único (ej: "orador_1") y describe su apariencia.
-
-2.  **Transcripción y Encuadre Preciso**: Transcribe todo el audio del video. Es CRUCIAL que dividas la transcripción en segmentos lógicos (frases o ideas cortas). Para cada segmento:
-    *   Asigna el ID del orador correspondiente.
-    *   Proporciona el texto exacto.
-    *   Indica los tiempos de **inicio y fin** en segundos con la mayor precisión posible.
-    *   **MUY IMPORTANTE**: Detecta la cara del orador en ese segmento y proporciona las coordenadas normalizadas (de 0.0 a 1.0) del **centro de su cara** en el campo \`faceCoordinates\`. \`x\` es la coordenada horizontal (0.0 es izquierda, 1.0 es derecha) y \`y\` es la vertical (0.0 es arriba, 1.0 es abajo). Esto es fundamental para el reencuadre automático.
-
-3.  **Extracción de Clips Virales**: Basándote en la transcripción, identifica de 2 a 4 momentos con alto potencial viral. Para cada clip potencial:
-    *   Crea un título corto y atractivo.
-    *   Escribe un resumen conciso.
-    *   Indica los tiempos de inicio y fin exactos en segundos.
-    *   Identifica al orador principal del clip.
-    *   Asígnale una puntuación de viralidad de 1 a 10.
-
-Devuelve toda esta información en el formato JSON solicitado.`},
+            { text: `Eres un experto editor de video para redes sociales. Tu tarea es analizar el siguiente video para preparar la creación de clips verticales.\n\n**Instrucciones Clave:**\n\n1.  **Identificar Oradores y su Posición Estable**: \n    *   Identifica a cada persona que habla en el video. Asigna un ID único (ej: "orador_1") y una descripción para cada uno.\n    *   Para cada orador, determina la posición facial **más común y representativa** a lo largo del video. Esta será su \`faceCoordinates\` fija. Esto es clave para un encuadre estable.\n\n2.  **Transcripción y Atribución Inteligente**: \n    *   Transcribe el audio completo.\n    *   Para cada frase, atribúyela al orador correcto (\`speakerId\`). Usa una combinación de la evidencia visual (quién parece estar hablando) y el contexto del audio para tomar una decisión segura.\n    *   **Regla Importante**: No cambies de orador en medio de una oración o frase coherente. Mantén la atribución al mismo orador hasta que haya una pausa clara o un cambio de turno evidente en la conversación.\n\n3.  **Extracción de Clips Virales**:\n    *   Basado en la transcripción, identifica de 2 a 4 momentos de alto impacto.\n    *   Define el \`title\`, \`summary\`, \`startTime\`, \`endTime\`, \`mainSpeakerId\` y \`viralityScore\` para cada uno.\n\nEl objetivo es un análisis preciso que permita una edición de video lógica y de alta calidad. Proporciona la salida en el formato JSON solicitado.`},
         ],
         media: [
             {
@@ -121,11 +95,9 @@ Devuelve toda esta información en el formato JSON solicitado.`},
     
     if (!Array.isArray(output.clips)) {
         console.error("La respuesta de la IA no fue válida o no contenía clips:", output);
-        // Provide a default empty array for clips to prevent downstream errors.
         output.clips = [];
     }
     
-    // Sort clips by virality score descending
     output.clips.sort((a: AnalyzedClip, b: AnalyzedClip) => b.viralityScore - a.viralityScore);
 
     console.log(`Análisis completo. Se encontraron ${output.clips.length} clips, ${output.speakers.length} oradores y ${output.transcription.length} segmentos de transcripción.`);

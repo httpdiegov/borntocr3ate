@@ -1,4 +1,3 @@
-
 'use server';
 
 /**
@@ -20,19 +19,19 @@ const FaceCoordinatesSchema = z.object({
   y: z.number().describe("Normalized vertical coordinate of the face center."),
 });
 
-// Define the schema for a speaker identified in the video
+// Define the schema for a speaker, now including their stable face coordinates
 const SpeakerSchema = z.object({
   id: z.string().describe('A unique identifier for the speaker (e.g., "orador_1").'),
   description: z.string().describe('A brief description of the speaker (e.g., "man with glasses on the left").'),
+  faceCoordinates: FaceCoordinatesSchema.describe("The single, most representative (stable) position of the speaker's face throughout the video."),
 });
 
-// Define the schema for a segment of the transcription, now with face coordinates
+// Define the schema for a segment of the transcription, which no longer needs coordinates
 const TranscriptionSegmentSchema = z.object({
     speakerId: z.string().describe('The ID of the speaker for this segment.'),
     text: z.string().describe('The transcribed text.'),
     startTime: z.number().describe('Start time in seconds.'),
     endTime: z.number().describe('End time in seconds.'),
-    faceCoordinates: FaceCoordinatesSchema,
 });
 
 
@@ -41,8 +40,8 @@ const CreateVideoClipInputSchema = z.object({
   clipStartTime: z.number().describe('Start time of the clip in seconds.'),
   clipEndTime: z.number().describe('End time of the clip in seconds.'),
   clipTitle: z.string().describe('The title of the clip, used for the output filename.'),
-  speakers: z.array(SpeakerSchema).describe('List of all speakers identified in the video.'),
-  transcription: z.array(TranscriptionSegmentSchema).describe('Transcription segments with speaker IDs, timings, and face coordinates.'),
+  speakers: z.array(SpeakerSchema).describe('List of all speakers identified in the video, with their fixed face coordinates.'),
+  transcription: z.array(TranscriptionSegmentSchema).describe('Transcription segments with speaker IDs and timings.'),
 });
 export type CreateVideoClipInput = z.infer<typeof CreateVideoClipInputSchema>;
 
@@ -55,7 +54,7 @@ const CreateVideoClipOutputSchema = z.object({
 export type CreateVideoClipOutput = z.infer<typeof CreateVideoClipOutputSchema>;
 
 async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipOutput> {
-  const { videoUrl, clipStartTime, clipEndTime, clipTitle, transcription } = input;
+  const { videoUrl, clipStartTime, clipEndTime, clipTitle, transcription, speakers } = input;
   let allFfmpegCommands = 'Error: Command not generated.';
 
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'clip-processing-'));
@@ -77,73 +76,64 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
     const relevantTranscription = transcription.filter(
         (seg) => seg.startTime < clipEndTime && seg.endTime > clipStartTime
     ).sort((a, b) => a.startTime - b.startTime);
-
+    
     if (relevantTranscription.length === 0) {
-        throw new Error("No transcription segments found in the specified time range to create a clip.");
+      throw new Error("No transcription segments found in the specified time range to create a clip.");
     }
+    
+    const speakerPositions = new Map(speakers.map(s => [s.id, s.faceCoordinates]));
 
-    const ih = 1080; // Video height
-    const iw = 1920; // Video width
+    const ih = 1080;
+    const iw = 1920;
     const cropWidth = Math.floor(ih * 9 / 16);
-    const panDuration = 1.0; // Pan duration in seconds
-    const panHalf = panDuration / 2;
 
-    // Create a list of unique camera positions (keyframes) based on speaker changes.
-    const keyframes: { time: number; cropX: number }[] = [];
-    if (relevantTranscription.length > 0) {
-        for (const segment of relevantTranscription) {
-            const cropX = Math.max(0, Math.min(iw - cropWidth, Math.floor(segment.faceCoordinates.x * iw - cropWidth / 2)));
-            // Add keyframe if it's the first one or the position has changed significantly.
-            if (keyframes.length === 0 || Math.abs(cropX - keyframes[keyframes.length - 1].cropX) > 5) {
-                keyframes.push({ time: segment.startTime, cropX });
-            }
-        }
-        // If all segments are at the same position, ensure at least one keyframe exists.
-        if (keyframes.length === 0) {
-             const cropX = Math.max(0, Math.min(iw - cropWidth, Math.floor(relevantTranscription[0].faceCoordinates.x * iw - cropWidth / 2)));
-             keyframes.push({ time: relevantTranscription[0].startTime, cropX });
-        }
-    }
+    let filterComplex = "";
+    let lastEndTime = clipStartTime;
 
-    // Build the ffmpeg filter expression for smooth panning.
-    let x_expr: string;
-    if (keyframes.length <= 1) {
-        // If one or zero keyframes, the crop position is static.
-        const cropX = keyframes.length > 0 ? keyframes[0].cropX : (iw - cropWidth) / 2;
-        x_expr = `${cropX}`;
-    } else {
-        // Build a chained if-expression for the crop's x position.
-        // The expression is built backwards for correct ffmpeg filtergraph nesting.
-        let chained_expr = `${keyframes[keyframes.length - 1].cropX}`;
-        for (let i = keyframes.length - 2; i >= 0; i--) {
-            const curr = keyframes[i];
-            const next = keyframes[i + 1];
-            
-            const panStartTime = next.time - panHalf;
-            const lerp = `(${curr.cropX}+(t-${panStartTime})/${panDuration}*(${next.cropX}-${curr.cropX}))`;
-            
-            chained_expr = `if(lt(t,${panStartTime}),${curr.cropX},if(lt(t,${panStartTime}+${panDuration}),${lerp},${chained_expr}))`;
-        }
-        x_expr = chained_expr;
-    }
+    relevantTranscription.forEach((segment, index) => {
+        const segmentStart = Math.max(segment.startTime, clipStartTime);
+        const segmentEnd = Math.min(segment.endTime, clipEndTime);
+        if (segmentStart >= segmentEnd) return;
 
-    const clipDuration = clipEndTime - clipStartTime;
+        const faceCoordinates = speakerPositions.get(segment.speakerId);
+        if (!faceCoordinates) {
+            console.warn(`Warning: Could not find face coordinates for speaker ${segment.speakerId}. Skipping segment.`);
+            return;
+        }
+
+        const faceX_norm = faceCoordinates.x;
+        const cropX = Math.max(0, Math.min(iw - cropWidth, Math.floor(faceX_norm * iw - cropWidth / 2)));
+
+        // Trim the original video, apply the crop, and create a stream for this segment
+        filterComplex += `[0:v]trim=${segmentStart}:${segmentEnd},setpts=PTS-STARTPTS,crop=${cropWidth}:${ih}:${cropX}:0,scale=1080:1920,setsar=1[v${index}]; `;
+        lastEndTime = segmentEnd;
+    });
+
+    // Chain all the segment streams together
+    const concatFilter = relevantTranscription.map((_, index) => `[v${index}]`).join('') + `concat=n=${relevantTranscription.length}:v=1:a=0[outv]`;
+    filterComplex += concatFilter;
+
     const tempVideoPath = path.join(tempDir, 'temp_video.mp4');
 
-    // A single ffmpeg command to crop, pan, and scale the video. Audio is handled separately.
-    const videoProcessingCommand = `ffmpeg -y -ss ${clipStartTime} -t ${clipDuration} -i "${originalVideoPath}" -vf "crop=${cropWidth}:${ih}:x='${x_expr}':y=0,scale=1080:1920,setsar=1" -c:v libx264 -preset veryfast -an "${tempVideoPath}"`;
-    
-    console.log('Processing video with smooth panning...');
+    // Execute the complex filter in one go
+    const videoProcessingCommand = `ffmpeg -y -i "${originalVideoPath}" -filter_complex "${filterComplex}" -map "[outv]" -c:v libx264 -preset veryfast "${tempVideoPath}"`;
+    console.log('Processing video with filter_complex...');
     allFfmpegCommands = videoProcessingCommand + "\n\n";
     execSync(videoProcessingCommand, { stdio: 'inherit' });
 
-    // Final command to mux the processed video with the original audio track.
-    // Using -c:v copy is efficient as the video is already encoded.
-    const finalCommand = `ffmpeg -y -i "${tempVideoPath}" -ss ${clipStartTime} -t ${clipDuration} -i "${originalVideoPath}" -c:v copy -c:a aac -map 0:v:0 -map 1:a:0 "${outputClipPath}"`;
-    console.log('Adding original audio to the final clip...');
+    // Extract the audio from the original clip duration
+    const clipDuration = clipEndTime - clipStartTime;
+    const tempAudioPath = path.join(tempDir, 'temp_audio.aac');
+    const audioCommand = `ffmpeg -y -ss ${clipStartTime} -t ${clipDuration} -i "${originalVideoPath}" -vn -c:a aac "${tempAudioPath}"`;
+    console.log('Extracting audio segment...');
+    allFfmpegCommands += audioCommand + "\n\n";
+    execSync(audioCommand, { stdio: 'inherit' });
+
+    // Mux the processed video and extracted audio
+    const finalCommand = `ffmpeg -y -i "${tempVideoPath}" -i "${tempAudioPath}" -c:v copy -c:a copy -map 0:v:0 -map 1:a:0 -shortest "${outputClipPath}"`;
+    console.log('Muxing final video and audio...');
     allFfmpegCommands += finalCommand;
     execSync(finalCommand, { stdio: 'inherit' });
-
 
     if (!fs.existsSync(outputClipPath)) {
         throw new Error("ffmpeg command did not produce an output file.");
