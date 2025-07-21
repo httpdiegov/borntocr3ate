@@ -34,7 +34,7 @@ const speakerPositionPrompt = ai.definePrompt({
     name: 'speakerPositionPrompt',
     input: { schema: GetSpeakerPositionInputSchema },
     output: { schema: GetSpeakerPositionOutputSchema },
-    model: googleAI.model('gemini-1.5-pro'), // Use Pro model for larger file limits
+    model: googleAI.model('gemini-1.5-pro'),
     prompt: `Eres un experto en análisis de video. Tu única tarea es identificar a la persona principal en el siguiente video y determinar su posición en el cuadro.
 
 Devuelve un solo objeto 'speaker' con un ID, una breve descripción y su posición ('izquierda', 'derecha', 'centro'). Si no hay una persona clara, devuelve un objeto vacío.
