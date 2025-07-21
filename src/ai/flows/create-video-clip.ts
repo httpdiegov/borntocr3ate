@@ -104,7 +104,8 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
         const complexFilter = `${cropFilters.join(',')},scale=1080:1920,setsar=1`;
         const duration = clipEndTime - clipStartTime;
 
-        // The final command applies the filter complex.
+        // The final command applies the filter complex. It seeks to the start time (-ss) before the input for accuracy,
+        // and uses -t to set the duration of the clip.
         finalFfmpegCommand = `ffmpeg -y -ss ${clipStartTime} -i "${originalVideoPath}" -t ${duration} -filter_complex "${complexFilter}" -preset veryfast -c:a copy "${outputClipPath}"`;
     }
     
