@@ -13,9 +13,14 @@ import { z } from 'zod';
 const SpeakerSchema = z.object({
   id: z.string().describe('A unique identifier for the speaker (e.g., "orador_1").'),
   description: z.string().describe('A brief description of the speaker (e.g., "man with glasses on the left").'),
-  position: z.enum(['izquierda', 'derecha', 'centro', 'desconocido']).describe('The speaker\'s general position in the frame.'),
 });
 export type Speaker = z.infer<typeof SpeakerSchema>;
+
+// Define schema for face coordinates
+const FaceCoordinatesSchema = z.object({
+  x: z.number().describe("The normalized horizontal coordinate (from 0.0 to 1.0) of the center of the speaker's face."),
+  y: z.number().describe("The normalized vertical coordinate (from 0.0 to 1.0) of the center of the speaker's face."),
+}).describe("The precise coordinates of the speaker's face in the frame for this segment.");
 
 // Define the schema for a segment of the transcription, now required for dynamic cropping
 const TranscriptionSegmentSchema = z.object({
@@ -23,6 +28,7 @@ const TranscriptionSegmentSchema = z.object({
   text: z.string().describe('The transcribed text.'),
   startTime: z.number().describe('Start time of the segment in seconds with high precision.'),
   endTime: z.number().describe('End time of the segment in seconds with high precision.'),
+  faceCoordinates: FaceCoordinatesSchema,
 });
 export type TranscriptionSegment = z.infer<typeof TranscriptionSegmentSchema>;
 
@@ -80,15 +86,19 @@ const analyzeVideoContentFlow = ai.defineFlow(
         model: 'googleai/gemini-1.5-pro',
         output: { schema: AnalyzeVideoOutputSchema },
         prompt: [
-            { text: `Eres un experto en producción de video para redes sociales. Tu tarea es analizar el siguiente video para preparar la creación de clips verticales.
+            { text: `Eres un experto director y editor de video para redes sociales. Tu tarea es analizar el siguiente video para preparar la creación de clips verticales con enfoque automático.
 
 Por favor, realiza las siguientes tareas en orden:
 
-1.  **Identifica a los Oradores**: Observa a las personas en el video. Identifica a cada orador único. Para cada uno, crea un ID único (ej: "orador_1"), describe su apariencia y determina su posición general en el cuadro (izquierda, derecha, centro).
+1.  **Identifica a los Oradores**: Observa a las personas en el video. Identifica a cada orador único. Para cada uno, crea un ID único (ej: "orador_1") y describe su apariencia.
 
-2.  **Transcripción Detallada por Orador**: Transcribe todo el audio del video. Es CRUCIAL que dividas la transcripción en segmentos lógicos (frases o ideas cortas). Para cada segmento, asigna el ID del orador correspondiente, el texto exacto, y los tiempos de **inicio y fin** en segundos con la mayor precisión posible (dos decimales si es posible). Esto es fundamental para la edición posterior.
+2.  **Transcripción y Encuadre Preciso**: Transcribe todo el audio del video. Es CRUCIAL que dividas la transcripción en segmentos lógicos (frases o ideas cortas). Para cada segmento:
+    *   Asigna el ID del orador correspondiente.
+    *   Proporciona el texto exacto.
+    *   Indica los tiempos de **inicio y fin** en segundos con la mayor precisión posible.
+    *   **MUY IMPORTANTE**: Detecta la cara del orador en ese segmento y proporciona las coordenadas normalizadas (de 0.0 a 1.0) del **centro de su cara** en el campo \`faceCoordinates\`. \`x\` es la coordenada horizontal (0.0 es izquierda, 1.0 es derecha) y \`y\` es la vertical (0.0 es arriba, 1.0 es abajo). Esto es fundamental para el reencuadre automático.
 
-3.  **Extracción de Clips Virales**: Basándote en la transcripción, identifica de 2 a 4 momentos con alto potencial viral (ganchos, declaraciones fuertes, consejos útiles). Para cada clip potencial:
+3.  **Extracción de Clips Virales**: Basándote en la transcripción, identifica de 2 a 4 momentos con alto potencial viral. Para cada clip potencial:
     *   Crea un título corto y atractivo.
     *   Escribe un resumen conciso.
     *   Indica los tiempos de inicio y fin exactos en segundos.

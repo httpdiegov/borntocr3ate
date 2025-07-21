@@ -3,7 +3,7 @@
 
 /**
  * @fileOverview A flow for creating a vertical video clip from a larger video using ffmpeg.
- * This version uses a robust "cut and concatenate" method to ensure compatibility and natural timing.
+ * This version uses a robust "cut and concatenate" method with precise, face-centered dynamic cropping.
  */
 
 import { z } from 'zod';
@@ -13,19 +13,25 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
+// Define schema for face coordinates
+const FaceCoordinatesSchema = z.object({
+  x: z.number().describe("Normalized horizontal coordinate of the face center."),
+  y: z.number().describe("Normalized vertical coordinate of the face center."),
+});
+
 // Define the schema for a speaker identified in the video
 const SpeakerSchema = z.object({
   id: z.string().describe('A unique identifier for the speaker (e.g., "orador_1").'),
   description: z.string().describe('A brief description of the speaker (e.g., "man with glasses on the left").'),
-  position: z.enum(['izquierda', 'derecha', 'centro', 'desconocido']).describe('The speaker\'s general position in the frame.'),
 });
 
-// Define the schema for a segment of the transcription, now required for dynamic cropping
+// Define the schema for a segment of the transcription, now with face coordinates
 const TranscriptionSegmentSchema = z.object({
     speakerId: z.string().describe('The ID of the speaker for this segment.'),
     text: z.string().describe('The transcribed text.'),
     startTime: z.number().describe('Start time in seconds.'),
     endTime: z.number().describe('End time in seconds.'),
+    faceCoordinates: FaceCoordinatesSchema,
 });
 
 
@@ -35,7 +41,7 @@ const CreateVideoClipInputSchema = z.object({
   clipEndTime: z.number().describe('End time of the clip in seconds.'),
   clipTitle: z.string().describe('The title of the clip, used for the output filename.'),
   speakers: z.array(SpeakerSchema).describe('List of all speakers identified in the video.'),
-  transcription: z.array(TranscriptionSegmentSchema).describe('Transcription segments with speaker IDs and timings.'),
+  transcription: z.array(TranscriptionSegmentSchema).describe('Transcription segments with speaker IDs, timings, and face coordinates.'),
 });
 export type CreateVideoClipInput = z.infer<typeof CreateVideoClipInputSchema>;
 
@@ -51,11 +57,12 @@ type Shot = {
     startTime: number;
     endTime: number;
     speakerId: string;
+    faceCoordinates: z.infer<typeof FaceCoordinatesSchema>;
 };
 
 
 async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipOutput> {
-  const { videoUrl, clipStartTime, clipEndTime, clipTitle, speakers, transcription } = input;
+  const { videoUrl, clipStartTime, clipEndTime, clipTitle, transcription } = input;
   let finalFfmpegCommand = 'Error: Command not generated.';
 
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'clip-processing-'));
@@ -87,18 +94,20 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
 
     } else {
         const shots: Shot[] = [];
+        let lastKnownCoords = relevantTranscription[0].faceCoordinates;
         let lastSpeakerId = relevantTranscription[0].speakerId;
         let lastEndTime = clipStartTime;
 
         for (const segment of relevantTranscription) {
             const segmentStart = Math.max(segment.startTime, clipStartTime);
             
-            // If there's a silence gap, create a shot for it with the last speaker.
+            // If there's a silence gap, create a shot for it using the last known speaker and coordinates.
             if (segmentStart > lastEndTime) {
                 shots.push({
                     startTime: lastEndTime,
                     endTime: segmentStart,
                     speakerId: lastSpeakerId,
+                    faceCoordinates: lastKnownCoords
                 });
             }
             
@@ -106,10 +115,12 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
                 startTime: segmentStart,
                 endTime: Math.min(segment.endTime, clipEndTime),
                 speakerId: segment.speakerId,
+                faceCoordinates: segment.faceCoordinates,
             });
             
             lastEndTime = Math.min(segment.endTime, clipEndTime);
             lastSpeakerId = segment.speakerId;
+            lastKnownCoords = segment.faceCoordinates;
         }
 
         // If the last segment doesn't reach the end of the clip, add a final shot.
@@ -118,6 +129,7 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
                 startTime: lastEndTime,
                 endTime: clipEndTime,
                 speakerId: lastSpeakerId,
+                faceCoordinates: lastKnownCoords
             });
         }
         
@@ -129,27 +141,17 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
             // Skip zero-duration shots
             if (shot.endTime <= shot.startTime) continue;
 
-            const speaker = speakers.find(s => s.id === shot.speakerId);
-            let x_expr: string;
-
-            switch (speaker?.position) {
-                case 'izquierda':
-                    x_expr = 'iw*0.25 - (ih*9/16)/2'; // Center of the left half
-                    break;
-                case 'derecha':
-                    x_expr = 'iw*0.75 - (ih*9/16)/2'; // Center of the right half
-                    break;
-                case 'centro':
-                default:
-                    x_expr = '(iw-ih*9/16)/2'; // Center of the full video
-                    break;
-            }
-
+            const faceX = shot.faceCoordinates.x;
+            // The x-coordinate for the crop filter. It's the face's center X (as a fraction of iw) minus half the desired crop width.
+            // We clamp the value to ensure the crop area doesn't go out of bounds.
+            const x_expr = `max(0, min(iw - ih*9/16, ${faceX}*iw - (ih*9/16)/2))`;
+            
             const shotStartTime = shot.startTime;
             const shotDuration = shot.endTime - shot.startTime;
             const intermediateFilePath = path.join(tempDir, `part_${i}.mp4`);
             intermediateFiles.push(intermediateFilePath);
 
+            // Crop vertically centered on the face, then scale to 1080x1920
             const cropFilter = `crop=w=ih*9/16:h=ih:x=${x_expr}:y=0,scale=1080:1920,setsar=1`;
             
             const segmentCommand = `ffmpeg -y -ss ${shotStartTime} -i "${originalVideoPath}" -t ${shotDuration} -vf "${cropFilter}" -c:v libx264 -preset veryfast -c:a aac "${intermediateFilePath}"`;
