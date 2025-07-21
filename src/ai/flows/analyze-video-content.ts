@@ -26,7 +26,7 @@ const TranscriptionSegmentSchema = z.object({
 
 // Define the schema for the input of the flow
 const AnalyzeVideoInputSchema = z.object({
-  gcsUri: z.string().describe('The GCS URI of the video file (e.g., "gs://bucket/file").'),
+  publicUrl: z.string().url().describe('The public HTTPS URL of the video file.'),
   contentType: z.string().describe('The MIME type of the video file (e.g., "video/mp4").'),
 });
 export type AnalyzeVideoInput = z.infer<typeof AnalyzeVideoInputSchema>;
@@ -67,8 +67,8 @@ const analyzeVideoContentFlow = ai.defineFlow(
     console.log("Analizando video para identificar oradores, transcribir y encontrar clips...");
     
     // Validation to prevent the error
-    if (!input || !input.gcsUri || typeof input.gcsUri !== 'string' || !input.gcsUri.startsWith("gs://")) {
-      throw new Error(`Invalid or empty input.gcsUri. Must be a valid GCS URI string. Received: ${input?.gcsUri}`);
+    if (!input || !input.publicUrl || !input.publicUrl.startsWith("https://")) {
+      throw new Error(`Invalid or empty input.publicUrl. Must be a valid HTTPS URL. Received: ${input?.publicUrl}`);
     }
     if (!input.contentType || typeof input.contentType !== 'string') {
       throw new Error(`Invalid or empty input.contentType. Must be a valid MIME type string. Received: ${input?.contentType}`);
@@ -94,8 +94,13 @@ Por favor, realiza las siguientes tareas en orden:
     *   Asígnale una puntuación de viralidad de 1 a 10.
 
 Devuelve toda esta información en el formato JSON solicitado.`},
-            { media: { uri: input.gcsUri, contentType: input.contentType } }
-        ]
+        ],
+        media: [
+            {
+                uri: input.publicUrl,
+                contentType: input.contentType,
+            }
+        ],
     });
 
     if (!output) {
