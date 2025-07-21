@@ -20,7 +20,7 @@ import { createVideoClip } from "@/ai/flows/create-video-clip";
 import { Badge } from "../ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "../ui/label";
-import { getSpeakerPosition, type GetSpeakerPositionOutput } from "@/ai/flows/get-speaker-position";
+import { getSpeakerPosition } from "@/ai/flows/get-speaker-position";
 
 const sanitizeFilename = (filename: string): string => {
   return filename.replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -232,7 +232,7 @@ function ManualReframeTab() {
       if (!finalizeResult.success) throw new Error(finalizeResult.message);
       
       toast({ title: "IA detectando posición del orador..." });
-      const positionResult = await getSpeakerPosition({ gcsUri: videoInfo.gcsUri, contentType: videoFile.type });
+      const positionResult = await getSpeakerPosition({ publicUrl: videoInfo.publicUrl, contentType: videoFile.type });
       if (!positionResult.speaker) {
           throw new Error("La IA no pudo determinar la posición del orador principal.");
       }

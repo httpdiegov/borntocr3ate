@@ -18,7 +18,7 @@ export type Speaker = z.infer<typeof SpeakerSchema>;
 
 // Define the schema for the input of the flow
 const GetSpeakerPositionInputSchema = z.object({
-  gcsUri: z.string().describe('The GCS URI of the video file (e.g., "gs://bucket/file").'),
+  publicUrl: z.string().url().describe('The public HTTPS URL of the video file.'),
   contentType: z.string().describe('The MIME type of the video file (e.g., "video/mp4").'),
 });
 export type GetSpeakerPositionInput = z.infer<typeof GetSpeakerPositionInputSchema>;
@@ -48,7 +48,7 @@ const getSpeakerPositionFlow = ai.defineFlow(
 Devuelve un solo objeto 'speaker' con un ID, una breve descripción y su posición ('izquierda', 'derecha', 'centro'). Si no hay una persona clara, devuelve un objeto vacío.
 
 Video a analizar:`},
-        {media: { url: input.gcsUri, contentType: input.contentType}}
+        {media: { url: input.publicUrl, contentType: input.contentType}}
       ]
     });
     
