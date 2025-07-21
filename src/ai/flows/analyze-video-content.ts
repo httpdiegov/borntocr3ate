@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -5,6 +6,7 @@
  */
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
+import { googleAI } from '@genkit-ai/googleai';
 
 
 // Define the schema for a speaker identified in the video
@@ -54,6 +56,7 @@ export type AnalyzeVideoOutput = z.infer<typeof AnalyzeVideoOutputSchema>;
 
 const videoAnalysisPrompt = ai.definePrompt({
     name: 'videoAnalysisPrompt',
+    model: googleAI.model('gemini-1.5-pro'),
     input: { schema: AnalyzeVideoInputSchema },
     output: { schema: AnalyzeVideoOutputSchema },
     prompt: `Eres un experto en producción de video para redes sociales. Tu tarea es analizar el siguiente video para preparar la creación de clips verticales.
