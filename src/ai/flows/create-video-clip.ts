@@ -73,47 +73,52 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
     );
 
     // Generate the complex filtergraph for dynamic cropping
-    let complexFilter = "";
-    clipTranscription.forEach((segment, index) => {
+    // This approach uses a single filter chain with 'enable' for timeline-based cropping, which is more stable.
+    let cropFilterParts: string[] = [];
+    let lastEndTime = 0;
+
+    clipTranscription.forEach((segment) => {
         const speaker = speakers.find(s => s.id === segment.speakerId);
         if (!speaker) return;
 
-        const segmentStartTime = segment.startTime - clipStartTime; // Time relative to the clip start
+        const segmentStartTime = segment.startTime - clipStartTime;
         const segmentEndTime = segment.endTime - clipStartTime;
 
-        let crop_x: string;
-        // Center the 9:16 crop on the speaker
+        if (segmentStartTime < 0 || segmentEndTime > duration) return;
+
+        let x_expr: string;
         switch (speaker.position) {
             case 'izquierda':
-                crop_x = 'iw*0.25 - (ih*9/16)/2'; // Center of the left half
+                x_expr = 'iw*0.25 - (ih*9/16)/2'; // Center of the left half
                 break;
             case 'derecha':
-                crop_x = 'iw*0.75 - (ih*9/16)/2'; // Center of the right half
+                x_expr = 'iw*0.75 - (ih*9/16)/2'; // Center of the right half
                 break;
             case 'centro':
             default:
-                crop_x = '(iw-ih*9/16)/2'; // Center of the full video
+                x_expr = '(iw-ih*9/16)/2'; // Center of the full video
                 break;
         }
-
-        // Apply a subtle zoom and pan to keep the face centered
-        // Zooms in to 1.1x over 4 seconds, then stays there.
-        const zoom = "1.1";
-        const pan_duration = 4;
-        const pan_x = `'(iw/2) - (iw/2)/${zoom}'`;
-        const pan_y = `'(ih/2) - (ih/2)/${zoom}'`;
-
-        // We build a chain of filters. Each segment gets its own crop.
-        complexFilter += `[0:v]trim=${segmentStartTime}:${segmentEndTime},setpts=PTS-STARTPTS,crop=ih*9/16:ih:x=${crop_x},zoompan=z='min(zoom+0.0015,${zoom})':d=1:x=${pan_x}:y=${pan_y}:s=1080x1920,setpts=PTS-STARTPTS[v${index}]; `;
+        
+        // Add a crop filter part for this segment's timeline
+        cropFilterParts.push(`crop=w=ih*9/16:h=ih:x=${x_expr}:y=0:enable='between(t,${segmentStartTime},${segmentEndTime})'`);
+        lastEndTime = Math.max(lastEndTime, segmentEndTime);
     });
 
-    const concatInputs = clipTranscription.map((_, index) => `[v${index}]`).join('');
-    complexFilter += `${concatInputs}concat=n=${clipTranscription.length}:v=1:a=0[v_out]`;
-    
-    // Command to cut the main audio and combine it with the dynamically cropped video
-    ffmpegCommand = `ffmpeg -y -i "${originalVideoPath}" -ss ${clipStartTime} -t ${duration} -filter_complex "${complexFilter}" -map "[v_out]" -map 0:a? -c:a copy "${outputClipPath}"`;
-    
-    console.log(`Generated dynamic ffmpeg command: ${ffmpegCommand}`);
+    // If no specific segments are found, crop to the center for the whole duration
+    if (cropFilterParts.length === 0) {
+        console.warn("No transcription segments found for dynamic cropping. Defaulting to center crop.");
+        cropFilterParts.push("crop=w=ih*9/16:h=ih:x=(iw-ih*9/16)/2:y=0");
+    }
+
+    const complexFilter = cropFilterParts.join(',') + ",scale=1080:1920";
+
+    // Build the final ffmpeg command
+    // [0:v] is the video stream from the input file
+    // [0:a] is the audio stream
+    ffmpegCommand = `ffmpeg -y -i "${originalVideoPath}" -ss ${clipStartTime} -t ${duration} -filter_complex "[0:v]${complexFilter}[v_out]" -map "[v_out]" -map 0:a? -c:v libx264 -preset veryfast -c:a aac "${outputClipPath}"`;
+
+    console.log(`Generated FFMPEG command: ${ffmpegCommand}`);
 
     execSync(ffmpegCommand);
 
