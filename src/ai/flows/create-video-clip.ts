@@ -105,17 +105,20 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
           const cropFilter = `crop=w=ih*9/16:h=ih:x=${x_expr}:y=0,scale=1080:1920,setsar=1`;
           const duration = segment.endTime - segment.startTime;
 
+          // Use -ss before -i for faster seeking. Use veryfast preset for speed.
           const cutCommand = `ffmpeg -y -ss ${segment.startTime} -i "${originalVideoPath}" -t ${duration} -vf "${cropFilter}" -c:v libx264 -preset veryfast -c:a aac -f mpegts "${tempClipPath}"`;
           
           console.log(`Generating segment ${i}: ${cutCommand}`);
           execSync(cutCommand);
           tempClips.push(tempClipPath);
-          fs.appendFileSync(concatListPath, `file '${tempClipPath}'\n`);
+          fs.appendFileSync(concatListPath, `file '${path.basename(tempClipPath)}'\n`);
         }
         
+        // Use -f concat -safe 0 to allow relative paths in the concat list.
         finalFfmpegCommand = `ffmpeg -y -f concat -safe 0 -i "${concatListPath}" -c copy "${outputClipPath}"`;
         console.log(`Concatenating segments: ${finalFfmpegCommand}`);
-        execSync(finalFfmpegCommand);
+        // Execute concat from within the tempDir to handle relative paths correctly
+        execSync(finalFfmpegCommand, { cwd: tempDir });
     }
     
     if (!fs.existsSync(outputClipPath)) {
