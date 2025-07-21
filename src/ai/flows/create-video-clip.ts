@@ -89,8 +89,8 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
     if (relevantTranscription.length === 0) {
       console.warn("No transcription segments found for dynamic cropping. Defaulting to a simple center crop.");
       const clipDuration = clipEndTime - clipStartTime;
-      const cropFilter = `crop=w=ih*9/16:h=ih:x=(iw-ih*9/16)/2:y=0,scale=1080:1920,setsar=1`;
-      finalFfmpegCommand = `ffmpeg -y -ss ${clipStartTime} -i "${originalVideoPath}" -t ${clipDuration} -vf "${cropFilter}" -c:v libx264 -preset veryfast -c:a aac "${outputClipPath}"`;
+      const cropFilter = `crop=w=ih*9/16:h=ih:x=(iw-ih*9/16)/2:y=0`;
+      finalFfmpegCommand = `ffmpeg -y -ss ${clipStartTime} -i "${originalVideoPath}" -t ${clipDuration} -vf "${cropFilter},scale=1080:1920,setsar=1" -c:v libx264 -preset veryfast -c:a aac "${outputClipPath}"`;
       execSync(finalFfmpegCommand);
     } else {
         // Build shots timeline including silences
@@ -153,9 +153,10 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
 
             // Robust filter string
             const cropFilter = `crop=w=ih*9/16:h=ih:x='${x_expr}':y=0`;
-            const scaleFilter = `scale=1080:1920,setsar=1`;
+            const scaleFilter = `scale=1080:1920`;
+            const sarFilter = `setsar=1`;
             
-            const segmentCommand = `ffmpeg -y -ss ${shotStartTime} -i "${originalVideoPath}" -t ${shotDuration} -vf "${cropFilter},${scaleFilter}" -an "${intermediateFilePath}"`;
+            const segmentCommand = `ffmpeg -y -ss ${shotStartTime} -i "${originalVideoPath}" -t ${shotDuration} -vf "${cropFilter},${scaleFilter},${sarFilter}" -an "${intermediateFilePath}"`;
             console.log(`Creating segment ${i} (${formatTimestamp(shotStartTime)} -> ${formatTimestamp(shot.endTime)}): ${segmentCommand}`);
             execSync(segmentCommand);
             
@@ -219,4 +220,3 @@ export const createVideoClip = ai.defineFlow(
     },
     createClip
 );
-
