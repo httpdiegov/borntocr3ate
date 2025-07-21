@@ -6,7 +6,6 @@
  */
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
-import { googleAI } from '@genkit-ai/googleai';
 
 
 // Define the schema for a speaker identified in the video
@@ -64,7 +63,7 @@ const analyzeVideoContentFlow = ai.defineFlow(
     console.log("Analizando video para identificar oradores, transcribir y encontrar clips...");
     
     const { output } = await ai.generate({
-        model: googleAI.model('gemini-1.5-pro'),
+        model: 'googleai/gemini-1.5-pro',
         output: { schema: AnalyzeVideoOutputSchema },
         prompt: [
             { text: `Eres un experto en producción de video para redes sociales. Tu tarea es analizar el siguiente video para preparar la creación de clips verticales.
