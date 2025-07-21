@@ -151,7 +151,7 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
             const intermediateFilePath = path.join(tempDir, `part_${i}.mp4`);
             intermediateFiles.push(intermediateFilePath);
 
-            // Robust filter string
+            // Robust filter string, with x_expr encapsulated in single quotes
             const cropFilter = `crop=w=ih*9/16:h=ih:x='${x_expr}':y=0`;
             const scaleFilter = `scale=1080:1920`;
             const sarFilter = `setsar=1`;
