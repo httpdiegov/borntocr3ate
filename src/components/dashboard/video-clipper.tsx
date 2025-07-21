@@ -103,7 +103,7 @@ function SmartClipperTab() {
   const handleCreateClip = async (clip: AnalyzedClip) => {
     if (!analysisResult) return;
     setClipProcessingState(prev => ({ ...prev, [clip.id]: { isLoading: true } }));
-    toast({ title: "Creando clip dinámico...", description: "Esto puede tardar un momento. Requiere ffmpeg instalado." });
+    toast({ title: "Creando clip dinámico...", description: "Esto puede tardar un momento. Requiere ffmpeg y ffprobe instalados." });
 
     try {
       const result = await createVideoClip({ 
