@@ -2,7 +2,7 @@
 
 /**
  * @fileOverview A flow for creating a vertical video clip from a larger video using ffmpeg.
- * This version uses a robust "cut, concatenate, and re-add audio" method to ensure stability and sync.
+ * This version uses a robust, single-command `filter_complex` approach to ensure perfect sync.
  * It performs all mathematical calculations in TypeScript to avoid OS-specific command-line parsing issues.
  */
 
@@ -55,7 +55,7 @@ export type CreateVideoClipOutput = z.infer<typeof CreateVideoClipOutputSchema>;
 
 async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipOutput> {
   const { videoUrl, clipStartTime, clipEndTime, clipTitle, transcription, speakers } = input;
-  let allFfmpegCommands = 'Error: Command not generated.';
+  let ffmpegCommand = 'Error: Command not generated.';
 
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'clip-processing-'));
   const originalVideoPath = path.join(tempDir, 'original.mp4');
@@ -87,53 +87,47 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
     const iw = 1920;
     const cropWidth = Math.floor(ih * 9 / 16);
 
-    let filterComplex = "";
-    let lastEndTime = clipStartTime;
-
-    relevantTranscription.forEach((segment, index) => {
-        const segmentStart = Math.max(segment.startTime, clipStartTime);
-        const segmentEnd = Math.min(segment.endTime, clipEndTime);
-        if (segmentStart >= segmentEnd) return;
-
-        const faceCoordinates = speakerPositions.get(segment.speakerId);
-        if (!faceCoordinates) {
-            console.warn(`Warning: Could not find face coordinates for speaker ${segment.speakerId}. Skipping segment.`);
-            return;
+    // Default crop position (centers the frame)
+    let lastCropX = (iw - cropWidth) / 2;
+    if (relevantTranscription.length > 0) {
+        const firstSpeakerId = relevantTranscription[0].speakerId;
+        const firstSpeakerPos = speakerPositions.get(firstSpeakerId);
+        if (firstSpeakerPos) {
+            lastCropX = Math.max(0, Math.min(iw - cropWidth, Math.floor(firstSpeakerPos.x * iw - cropWidth / 2)));
         }
+    }
+
+    let cropXExpression = "";
+    // Build the nested if expression from the last segment to the first
+    for (let i = relevantTranscription.length - 1; i >= 0; i--) {
+        const segment = relevantTranscription[i];
+        const faceCoordinates = speakerPositions.get(segment.speakerId);
+        if (!faceCoordinates) continue;
 
         const faceX_norm = faceCoordinates.x;
         const cropX = Math.max(0, Math.min(iw - cropWidth, Math.floor(faceX_norm * iw - cropWidth / 2)));
+        
+        // For the last segment, this becomes the final 'else'
+        if (cropXExpression === "") {
+            cropXExpression = `${cropX}`;
+        } else {
+            cropXExpression = `if(between(t,${segment.startTime},${segment.endTime}),${cropX},${cropXExpression})`;
+        }
+        lastCropX = cropX;
+    }
+    // The very first segment defines the initial state before any other condition is met
+    cropXExpression = `if(between(t,${relevantTranscription[0].startTime},${relevantTranscription[0].endTime}),${lastCropX},${cropXExpression})`;
 
-        // Trim the original video, apply the crop, and create a stream for this segment
-        filterComplex += `[0:v]trim=${segmentStart}:${segmentEnd},setpts=PTS-STARTPTS,crop=${cropWidth}:${ih}:${cropX}:0,scale=1080:1920,setsar=1[v${index}]; `;
-        lastEndTime = segmentEnd;
-    });
+    const videoFilter = `trim=${clipStartTime}:${clipEndTime},setpts=PTS-STARTPTS,crop=w=${cropWidth}:h=${ih}:x='${cropXExpression}',scale=1080:1920,setsar=1`;
+    const audioFilter = `atrim=${clipStartTime}:${clipEndTime},asetpts=PTS-STARTPTS`;
 
-    // Chain all the segment streams together
-    const concatFilter = relevantTranscription.map((_, index) => `[v${index}]`).join('') + `concat=n=${relevantTranscription.length}:v=1:a=0[outv]`;
-    filterComplex += concatFilter;
+    const fullFilterComplex = `[0:v]${videoFilter}[outv];[0:a]${audioFilter}[outa]`;
 
-    const tempVideoPath = path.join(tempDir, 'temp_video.mp4');
-
-    // Execute the complex filter in one go
-    const videoProcessingCommand = `ffmpeg -y -i "${originalVideoPath}" -filter_complex "${filterComplex}" -map "[outv]" -c:v libx264 -preset veryfast "${tempVideoPath}"`;
-    console.log('Processing video with filter_complex...');
-    allFfmpegCommands = videoProcessingCommand + "\n\n";
-    execSync(videoProcessingCommand, { stdio: 'inherit' });
-
-    // Extract the audio from the original clip duration
-    const clipDuration = clipEndTime - clipStartTime;
-    const tempAudioPath = path.join(tempDir, 'temp_audio.aac');
-    const audioCommand = `ffmpeg -y -ss ${clipStartTime} -t ${clipDuration} -i "${originalVideoPath}" -vn -c:a aac "${tempAudioPath}"`;
-    console.log('Extracting audio segment...');
-    allFfmpegCommands += audioCommand + "\n\n";
-    execSync(audioCommand, { stdio: 'inherit' });
-
-    // Mux the processed video and extracted audio
-    const finalCommand = `ffmpeg -y -i "${tempVideoPath}" -i "${tempAudioPath}" -c:v copy -c:a copy -map 0:v:0 -map 1:a:0 -shortest "${outputClipPath}"`;
-    console.log('Muxing final video and audio...');
-    allFfmpegCommands += finalCommand;
-    execSync(finalCommand, { stdio: 'inherit' });
+    ffmpegCommand = `ffmpeg -y -i "${originalVideoPath}" -filter_complex "${fullFilterComplex}" -map "[outv]" -map "[outa]" -c:v libx264 -preset veryfast -c:a aac -shortest "${outputClipPath}"`;
+    
+    console.log('Processing video with a single robust command...');
+    console.log('Generated ffmpeg command:', ffmpegCommand);
+    execSync(ffmpegCommand, { stdio: 'inherit' });
 
     if (!fs.existsSync(outputClipPath)) {
         throw new Error("ffmpeg command did not produce an output file.");
@@ -144,13 +138,13 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
         success: true, 
         message: `Clip created successfully! Saved to ${outputClipPath}`,
         filePath: outputClipPath,
-        ffmpegCommand: allFfmpegCommands
+        ffmpegCommand: ffmpegCommand
     };
 
   } catch (error: any) {
     console.error('Failed to create video clip:', error);
     const errorMessage = error.stderr ? error.stderr.toString() : error.message;
-    return { success: false, message: `Failed to create clip: ${errorMessage}`, ffmpegCommand: allFfmpegCommands };
+    return { success: false, message: `Failed to create clip: ${errorMessage}`, ffmpegCommand: ffmpegCommand };
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
