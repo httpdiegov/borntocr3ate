@@ -101,7 +101,6 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
         for (const segment of relevantTranscription) {
             const segmentStart = Math.max(segment.startTime, clipStartTime);
             
-            // If there's a silence gap, create a shot for it using the last known speaker and coordinates.
             if (segmentStart > lastEndTime) {
                 shots.push({
                     startTime: lastEndTime,
@@ -123,7 +122,6 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
             lastKnownCoords = segment.faceCoordinates;
         }
 
-        // If the last segment doesn't reach the end of the clip, add a final shot.
         if (lastEndTime < clipEndTime) {
             shots.push({
                 startTime: lastEndTime,
@@ -138,12 +136,9 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
         
         for (let i = 0; i < shots.length; i++) {
             const shot = shots[i];
-            // Skip zero-duration shots
             if (shot.endTime <= shot.startTime) continue;
 
             const faceX = shot.faceCoordinates.x;
-            // The x-coordinate for the crop filter. It's the face's center X (as a fraction of iw) minus half the desired crop width.
-            // We clamp the value to ensure the crop area doesn't go out of bounds.
             const x_expr = `max(0, min(iw - ih*9/16, ${faceX}*iw - (ih*9/16)/2))`;
             
             const shotStartTime = shot.startTime;
@@ -151,10 +146,9 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
             const intermediateFilePath = path.join(tempDir, `part_${i}.mp4`);
             intermediateFiles.push(intermediateFilePath);
 
-            // Crop vertically centered on the face, then scale to 1080x1920
             const cropFilter = `crop=w=ih*9/16:h=ih:x=${x_expr}:y=0,scale=1080:1920,setsar=1`;
             
-            const segmentCommand = `ffmpeg -y -ss ${shotStartTime} -i "${originalVideoPath}" -t ${shotDuration} -vf "${cropFilter}" -c:v libx264 -preset veryfast -c:a aac "${intermediateFilePath}"`;
+            const segmentCommand = `ffmpeg -y -ss ${shotStartTime} -i "${originalVideoPath}" -t ${shotDuration} -vf "${cropFilter}" -an "${intermediateFilePath}"`;
             console.log(`Creating segment ${i} (${formatTimestamp(shotStartTime)} -> ${formatTimestamp(shot.endTime)}): ${segmentCommand}`);
             execSync(segmentCommand);
             
@@ -164,9 +158,19 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
         if (intermediateFiles.length === 0) {
             throw new Error("No video segments could be generated from the shots.");
         }
+        
+        const videoConcatCommand = `ffmpeg -y -f concat -safe 0 -i "${concatFilePath}" -c copy "${path.join(tempDir, 'video_only.mp4')}"`;
+        console.log(`Concatenating video segments: ${videoConcatCommand}`);
+        execSync(videoConcatCommand);
 
-        finalFfmpegCommand = `ffmpeg -y -f concat -safe 0 -i "${concatFilePath}" -c copy "${outputClipPath}"`;
-        console.log(`Concatenating segments: ${finalFfmpegCommand}`);
+        const audioStartTime = clipStartTime;
+        const audioDuration = clipEndTime - clipStartTime;
+        const audioExtractCommand = `ffmpeg -y -ss ${audioStartTime} -i "${originalVideoPath}" -t ${audioDuration} -vn -c:a aac "${path.join(tempDir, 'audio.aac')}"`;
+        console.log(`Extracting audio: ${audioExtractCommand}`);
+        execSync(audioExtractCommand);
+        
+        finalFfmpegCommand = `ffmpeg -y -i "${path.join(tempDir, 'video_only.mp4')}" -i "${path.join(tempDir, 'audio.aac')}" -c:v copy -c:a aac "${outputClipPath}"`;
+        console.log(`Combining video and audio: ${finalFfmpegCommand}`);
         execSync(finalFfmpegCommand);
     }
 
@@ -205,3 +209,5 @@ export const createVideoClip = ai.defineFlow(
     },
     createClip
 );
+
+    
