@@ -1,28 +1,24 @@
 "use client";
 
-import React, { useState } from "react";
+import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { handleGenerateNewsBrief } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Bot, RefreshCw } from "lucide-react";
+import { Bot, RefreshCw, AlertTriangle } from "lucide-react";
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
-} from "@/components/ui/accordion";
-
-interface NewsItem {
-  title: string;
-  summary: string;
-}
-
-interface NewsBriefState {
-  newsItems: NewsItem[] | null;
-  message: string;
-}
+} from "@/components/ui/accordion"
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -35,13 +31,9 @@ function SubmitButton() {
 }
 
 export default function NewsBrief({ className }: { className?: string }) {
-  const [state, setState] = useState<NewsBriefState>({ newsItems: null, message: "" });
+  const initialState = { newsItems: null, message: "" };
+  const [state, dispatch] = useActionState(handleGenerateNewsBrief, initialState);
   const { pending } = useFormStatus();
-
-  const handleSubmit = async (formData: FormData) => {
-    const result = await handleGenerateNewsBrief(null, formData);
-    setState(result);
-  };
 
   return (
     <Card className={className}>
@@ -55,36 +47,41 @@ export default function NewsBrief({ className }: { className?: string }) {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form action={handleSubmit} className="space-y-4">
+        <form action={dispatch} className="space-y-4">
           <SubmitButton />
         </form>
-        {state.message === "failed" && (
-          <p className="text-destructive mt-4">{state.message}</p>
-        )}
         <div className="mt-6">
-          {pending ? (
+          {isLoading ? (
             <div className="space-y-4">
               {[...Array(5)].map((_, i) => (
                 <div key={i} className="space-y-2">
                   <Skeleton className="h-6 w-3/4" />
                   <Skeleton className="h-4 w-full" />
-                   <Skeleton className="h-4 w-5/6" />
+                  <Skeleton className="h-4 w-5/6" />
                 </div>
               ))}
             </div>
           ) : (
-            state.newsItems && (
-              <Accordion type="single" collapsible className="w-full">
-                {state.newsItems.map((item, index) => (
-                  <AccordionItem value={`item-${index}`} key={index}>
-                    <AccordionTrigger>{item.title}</AccordionTrigger>
-                    <AccordionContent className="text-muted-foreground">
-                      {item.summary}
-                    </AccordionContent>
-                  </AccordionItem>
-                ))}
-              </Accordion>
-            )
+            <>
+              {state.message === "failed" && (
+                <div className="text-destructive mt-4 flex items-center gap-2">
+                    <AlertTriangle className="h-5 w-5"/>
+                    <p>No se pudieron generar las noticias.</p>
+                </div>
+              )}
+              {state.newsItems && (
+                <Accordion type="single" collapsible className="w-full">
+                  {state.newsItems.map((item, index) => (
+                    <AccordionItem value={`item-${index}`} key={index}>
+                      <AccordionTrigger>{item.title}</AccordionTrigger>
+                      <AccordionContent className="text-muted-foreground">
+                        {item.summary}
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
+              )}
+            </>
           )}
         </div>
       </CardContent>
