@@ -3,8 +3,7 @@
 
 /**
  * @fileOverview A flow for creating a vertical video clip from a larger video using ffmpeg.
- * This version uses a robust split-and-concat method for broad ffmpeg compatibility,
- * addressing audio sync issues and erratic camera movements.
+ * This version uses a modern `filter_complex` with timeline support for efficient, single-pass processing.
  */
 
 import { z } from 'zod';
@@ -61,9 +60,6 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
   const safeClipTitle = clipTitle.replace(/[^a-zA-Z0-9_-]/g, '_');
   const outputClipPath = path.join(videosDir, `${safeClipTitle}.mp4`);
   
-  const tempClipPaths: string[] = [];
-  const concatFilePath = path.join(tempDir, 'concat-list.txt');
-
   try {
     console.log(`Downloading video from ${videoUrl}`);
     const response = await fetch(videoUrl);
@@ -72,7 +68,6 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
     fs.writeFileSync(originalVideoPath, Buffer.from(videoBuffer));
     console.log(`Video downloaded to ${originalVideoPath}`);
 
-    // Filter transcription to only include segments within our clip's timeframe that have duration
     const clipTranscription = transcription.filter(
         (seg) => seg.startTime >= clipStartTime && seg.endTime <= clipEndTime && seg.endTime > seg.startTime
     );
@@ -82,17 +77,10 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
       const duration = clipEndTime - clipStartTime;
       const cropFilter = "crop=w=ih*9/16:h=ih:x=(iw-ih*9/16)/2:y=0,scale=1080:1920,setsar=1";
       finalFfmpegCommand = `ffmpeg -y -i "${originalVideoPath}" -ss ${clipStartTime} -t ${duration} -vf "${cropFilter}" -c:v libx264 -preset veryfast -c:a aac "${outputClipPath}"`;
-      execSync(finalFfmpegCommand);
     } else {
-        // Generate intermediate video clips for each segment (without audio)
-        for (let i = 0; i < clipTranscription.length; i++) {
-            const segment = clipTranscription[i];
+        const cropFilters: string[] = [];
+        clipTranscription.forEach((segment, index) => {
             const speaker = speakers.find(s => s.id === segment.speakerId);
-            const segmentStartTime = segment.startTime;
-            const segmentDuration = segment.endTime - segment.startTime;
-            const tempOutputPath = path.join(tempDir, `temp_clip_${i}.ts`); // Use .ts for better concat support
-            tempClipPaths.push(tempOutputPath);
-
             let x_expr: string;
             switch (speaker?.position) {
                 case 'izquierda':
@@ -106,31 +94,22 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
                     x_expr = '(iw-ih*9/16)/2'; // Center of the full video
                     break;
             }
-            
-            // setsar=1 ensures correct aspect ratio after cropping
-            const cropFilter = `crop=w=ih*9/16:h=ih:x='${x_expr}':y=0,scale=1080:1920,setsar=1`;
+            // The `enable` option activates the filter only between the segment's start and end times relative to the clip's start.
+            const relativeStartTime = segment.startTime - clipStartTime;
+            const relativeEndTime = segment.endTime - clipStartTime;
+            cropFilters.push(`crop=w=ih*9/16:h=ih:x='${x_expr}':y=0:enable='between(t,${relativeStartTime},${relativeEndTime})'`);
+        });
 
-            // -an disables audio for these intermediate clips
-            const segmentCommand = `ffmpeg -y -ss ${segmentStartTime} -i "${originalVideoPath}" -t ${segmentDuration} -vf "${cropFilter}" -c:v libx264 -preset veryfast -an "${tempOutputPath}"`;
-            console.log(`Generating segment ${i}: ${segmentCommand}`);
-            execSync(segmentCommand);
-        }
-
-        // Create the file list for concatenation using ffmpeg's concat protocol
-        const fileListContent = `concat:${tempClipPaths.join('|')}`;
-        
-        // Extract the full audio for the clip duration
-        const fullAudioPath = path.join(tempDir, 'full_audio.aac');
+        // Chain all crop filters together, then scale the result.
+        const complexFilter = `${cropFilters.join(',')},scale=1080:1920,setsar=1`;
         const duration = clipEndTime - clipStartTime;
-        const audioCommand = `ffmpeg -y -ss ${clipStartTime} -i "${originalVideoPath}" -t ${duration} -vn -c:a aac "${fullAudioPath}"`;
-        console.log(`Extracting audio: ${audioCommand}`);
-        execSync(audioCommand);
 
-        // Concatenate video segments using concat protocol and combine with the full audio stream
-        finalFfmpegCommand = `ffmpeg -y -i "${fileListContent}" -i "${fullAudioPath}" -c:v copy -c:a copy -shortest "${outputClipPath}"`;
-        console.log(`Concatenating and adding audio: ${finalFfmpegCommand}`);
-        execSync(finalFfmpegCommand);
+        // The final command applies the filter complex.
+        finalFfmpegCommand = `ffmpeg -y -ss ${clipStartTime} -i "${originalVideoPath}" -t ${duration} -filter_complex "${complexFilter}" -preset veryfast -c:a copy "${outputClipPath}"`;
     }
+    
+    console.log(`Executing FFmpeg command: ${finalFfmpegCommand}`);
+    execSync(finalFfmpegCommand);
 
     if (!fs.existsSync(outputClipPath)) {
         throw new Error("ffmpeg command did not produce an output file.");
