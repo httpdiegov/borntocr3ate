@@ -2,7 +2,8 @@
 'use server';
 
 /**
- * @fileOverview An AI flow to analyze video content, identify speakers and their locations, and extract viral clips.
+ * @fileOverview An AI flow to analyze video content, identify speakers and their locations, and extract viral clips
+ * with detailed transcriptions for dynamic editing.
  */
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
@@ -16,12 +17,12 @@ const SpeakerSchema = z.object({
 });
 export type Speaker = z.infer<typeof SpeakerSchema>;
 
-// Define the schema for a segment of the transcription
+// Define the schema for a segment of the transcription, now required for dynamic cropping
 const TranscriptionSegmentSchema = z.object({
   speakerId: z.string().describe('The ID of the speaker for this segment.'),
-  text: z.string().describe('The transcribed text for this segment.'),
-  startTime: z.number().describe('Start time of the segment in seconds.'),
-  endTime: z.number().describe('End time of the segment in seconds.'),
+  text: z.string().describe('The transcribed text.'),
+  startTime: z.number().describe('Start time of the segment in seconds with high precision.'),
+  endTime: z.number().describe('End time of the segment in seconds with high precision.'),
 });
 export type TranscriptionSegment = z.infer<typeof TranscriptionSegmentSchema>;
 
@@ -49,7 +50,7 @@ export type AnalyzedClip = z.infer<typeof AnalyzedClipSchema>;
 // Define the schema for the output of the flow
 const AnalyzeVideoOutputSchema = z.object({
   speakers: z.array(SpeakerSchema).describe('A list of the speakers identified in the video.'),
-  transcription: z.array(TranscriptionSegmentSchema).describe('The full transcription, broken down by speaker and time.'),
+  transcription: z.array(TranscriptionSegmentSchema).describe('The full transcription, broken down by speaker and time for each logical sentence or phrase.'),
   clips: z.array(AnalyzedClipSchema).describe('A list of the most interesting clips found in the video.'),
 });
 export type AnalyzeVideoOutput = z.infer<typeof AnalyzeVideoOutputSchema>;
@@ -85,7 +86,7 @@ Por favor, realiza las siguientes tareas en orden:
 
 1.  **Identifica a los Oradores**: Observa a las personas en el video. Identifica a cada orador único. Para cada uno, crea un ID único (ej: "orador_1"), describe su apariencia y determina su posición general en el cuadro (izquierda, derecha, centro).
 
-2.  **Transcripción Detallada por Orador**: Transcribe todo el audio del video. Es crucial que dividas la transcripción en segmentos lógicos (frases o ideas cortas). Para cada segmento, asigna el ID del orador correspondiente, el texto exacto, y los tiempos de **inicio y fin** en segundos con la mayor precisión posible.
+2.  **Transcripción Detallada por Orador**: Transcribe todo el audio del video. Es CRUCIAL que dividas la transcripción en segmentos lógicos (frases o ideas cortas). Para cada segmento, asigna el ID del orador correspondiente, el texto exacto, y los tiempos de **inicio y fin** en segundos con la mayor precisión posible (dos decimales si es posible). Esto es fundamental para la edición posterior.
 
 3.  **Extracción de Clips Virales**: Basándote en la transcripción, identifica de 2 a 4 momentos con alto potencial viral (ganchos, declaraciones fuertes, consejos útiles). Para cada clip potencial:
     *   Crea un título corto y atractivo.

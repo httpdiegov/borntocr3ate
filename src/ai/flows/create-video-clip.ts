@@ -3,7 +3,8 @@
 
 /**
  * @fileOverview A flow for creating a vertical video clip from a larger video using ffmpeg.
- * This version uses a robust split-and-concat method for broad ffmpeg compatibility.
+ * This version uses a robust split-and-concat method for broad ffmpeg compatibility,
+ * addressing audio sync issues and erratic camera movements.
  */
 
 import { z } from 'zod';
@@ -20,11 +21,14 @@ const SpeakerSchema = z.object({
   position: z.enum(['izquierda', 'derecha', 'centro', 'desconocido']).describe('The speaker\'s general position in the frame.'),
 });
 
+// Define the schema for a segment of the transcription, now required for dynamic cropping
 const TranscriptionSegmentSchema = z.object({
-    speakerId: z.string(),
-    startTime: z.number(),
-    endTime: z.number(),
+    speakerId: z.string().describe('The ID of the speaker for this segment.'),
+    text: z.string().describe('The transcribed text.'), // Keep text for context, though not used by ffmpeg
+    startTime: z.number().describe('Start time in seconds.'),
+    endTime: z.number().describe('End time in seconds.'),
 });
+
 
 const CreateVideoClipInputSchema = z.object({
   videoUrl: z.string().url().describe('The public URL of the original horizontal video.'),
@@ -40,7 +44,7 @@ const CreateVideoClipOutputSchema = z.object({
     success: z.boolean(),
     message: z.string(),
     filePath: z.string().optional().describe("The local path where the video was saved."),
-    ffmpegCommand: z.string().describe("The ffmpeg command that was generated.")
+    ffmpegCommand: z.string().describe("The final ffmpeg command that was generated.")
 });
 export type CreateVideoClipOutput = z.infer<typeof CreateVideoClipOutputSchema>;
 
@@ -68,7 +72,7 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
     fs.writeFileSync(originalVideoPath, Buffer.from(videoBuffer));
     console.log(`Video downloaded to ${originalVideoPath}`);
 
-    // Filter transcription to only include segments within our clip's timeframe
+    // Filter transcription to only include segments within our clip's timeframe that have duration
     const clipTranscription = transcription.filter(
         (seg) => seg.startTime >= clipStartTime && seg.endTime <= clipEndTime && seg.endTime > seg.startTime
     );
@@ -76,17 +80,17 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
     if (clipTranscription.length === 0) {
       console.warn("No transcription segments found for dynamic cropping. Defaulting to a simple center crop.");
       const duration = clipEndTime - clipStartTime;
-      const cropFilter = "crop=w=ih*9/16:h=ih:x=(iw-ih*9/16)/2:y=0,scale=1080:1920";
+      const cropFilter = "crop=w=ih*9/16:h=ih:x=(iw-ih*9/16)/2:y=0,scale=1080:1920,setsar=1";
       finalFfmpegCommand = `ffmpeg -y -i "${originalVideoPath}" -ss ${clipStartTime} -t ${duration} -vf "${cropFilter}" -c:v libx264 -preset veryfast -c:a aac "${outputClipPath}"`;
       execSync(finalFfmpegCommand);
     } else {
-        // Generate intermediate clips for each segment
+        // Generate intermediate video clips for each segment (without audio)
         for (let i = 0; i < clipTranscription.length; i++) {
             const segment = clipTranscription[i];
             const speaker = speakers.find(s => s.id === segment.speakerId);
             const segmentStartTime = segment.startTime;
             const segmentDuration = segment.endTime - segment.startTime;
-            const tempOutputPath = path.join(tempDir, `temp_clip_${i}.mp4`);
+            const tempOutputPath = path.join(tempDir, `temp_clip_${i}.ts`); // Use .ts for better concat support
             tempClipPaths.push(tempOutputPath);
 
             let x_expr: string;
@@ -103,26 +107,27 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
                     break;
             }
             
-            const cropFilter = `crop=w=ih*9/16:h=ih:x='${x_expr}':y=0,scale=1080:1920`;
+            // setsar=1 ensures correct aspect ratio after cropping
+            const cropFilter = `crop=w=ih*9/16:h=ih:x='${x_expr}':y=0,scale=1080:1920,setsar=1`;
 
-            const segmentCommand = `ffmpeg -y -i "${originalVideoPath}" -ss ${segmentStartTime} -t ${segmentDuration} -vf "${cropFilter}" -c:v libx264 -preset veryfast -an "${tempOutputPath}"`;
+            // -an disables audio for these intermediate clips
+            const segmentCommand = `ffmpeg -y -ss ${segmentStartTime} -i "${originalVideoPath}" -t ${segmentDuration} -vf "${cropFilter}" -c:v libx264 -preset veryfast -an "${tempOutputPath}"`;
             console.log(`Generating segment ${i}: ${segmentCommand}`);
             execSync(segmentCommand);
         }
 
-        // Create the file list for concatenation
-        const fileListContent = tempClipPaths.map(p => `file '${p.replace(/\\/g, '/')}'`).join('\n');
-        fs.writeFileSync(concatFilePath, fileListContent);
+        // Create the file list for concatenation using ffmpeg's concat protocol
+        const fileListContent = `concat:${tempClipPaths.join('|')}`;
         
         // Extract the full audio for the clip duration
         const fullAudioPath = path.join(tempDir, 'full_audio.aac');
         const duration = clipEndTime - clipStartTime;
-        const audioCommand = `ffmpeg -y -i "${originalVideoPath}" -ss ${clipStartTime} -t ${duration} -vn -c:a aac "${fullAudioPath}"`;
+        const audioCommand = `ffmpeg -y -ss ${clipStartTime} -i "${originalVideoPath}" -t ${duration} -vn -c:a aac "${fullAudioPath}"`;
         console.log(`Extracting audio: ${audioCommand}`);
         execSync(audioCommand);
 
-        // Concatenate video segments and combine with the full audio
-        finalFfmpegCommand = `ffmpeg -y -f concat -safe 0 -i "${concatFilePath}" -i "${fullAudioPath}" -c:v copy -c:a aac -shortest "${outputClipPath}"`;
+        // Concatenate video segments using concat protocol and combine with the full audio stream
+        finalFfmpegCommand = `ffmpeg -y -i "${fileListContent}" -i "${fullAudioPath}" -c:v copy -c:a copy -shortest "${outputClipPath}"`;
         console.log(`Concatenating and adding audio: ${finalFfmpegCommand}`);
         execSync(finalFfmpegCommand);
     }
