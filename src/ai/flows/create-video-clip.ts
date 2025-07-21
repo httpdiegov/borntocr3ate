@@ -3,7 +3,7 @@
 
 /**
  * @fileOverview A flow for creating a vertical video clip from a larger video using ffmpeg.
- * This version uses a robust "cut and concatenate" method for maximum compatibility.
+ * This version uses a modern filter_complex with timeline expressions for dynamic cropping.
  */
 
 import { z } from 'zod';
@@ -23,7 +23,7 @@ const SpeakerSchema = z.object({
 // Define the schema for a segment of the transcription, now required for dynamic cropping
 const TranscriptionSegmentSchema = z.object({
     speakerId: z.string().describe('The ID of the speaker for this segment.'),
-    text: z.string().describe('The transcribed text.'), // Keep text for context, though not used by ffmpeg
+    text: z.string().describe('The transcribed text.'),
     startTime: z.number().describe('Start time in seconds.'),
     endTime: z.number().describe('End time in seconds.'),
 });
@@ -68,58 +68,53 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
     fs.writeFileSync(originalVideoPath, Buffer.from(videoBuffer));
     console.log(`Video downloaded to ${originalVideoPath}`);
 
+    const clipDuration = clipEndTime - clipStartTime;
     const clipTranscription = transcription.filter(
         (seg) => seg.startTime >= clipStartTime && seg.endTime <= clipEndTime && seg.endTime > seg.startTime
     );
 
     if (clipTranscription.length === 0) {
       console.warn("No transcription segments found for dynamic cropping. Defaulting to a simple center crop.");
-      const duration = clipEndTime - clipStartTime;
       const cropFilter = "crop=w=ih*9/16:h=ih:x=(iw-ih*9/16)/2:y=0,scale=1080:1920,setsar=1";
-      finalFfmpegCommand = `ffmpeg -y -i "${originalVideoPath}" -ss ${clipStartTime} -t ${duration} -vf "${cropFilter}" -c:v libx264 -preset veryfast -c:a aac "${outputClipPath}"`;
-      console.log(`Executing FFmpeg command: ${finalFfmpegCommand}`);
-      execSync(finalFfmpegCommand);
+      finalFfmpegCommand = `ffmpeg -y -ss ${clipStartTime} -i "${originalVideoPath}" -t ${clipDuration} -vf "${cropFilter}" -c:v libx264 -preset veryfast -c:a aac "${outputClipPath}"`;
+    
     } else {
-        const tempClips: string[] = [];
-        const concatListPath = path.join(tempDir, 'concat_list.txt');
+        const videoFilters: string[] = [];
+        clipTranscription.forEach((segment, index) => {
+            const speaker = speakers.find(s => s.id === segment.speakerId);
+            let x_expr: string;
 
-        for (let i = 0; i < clipTranscription.length; i++) {
-          const segment = clipTranscription[i];
-          const speaker = speakers.find(s => s.id === segment.speakerId);
-          let x_expr: string;
+            switch (speaker?.position) {
+                case 'izquierda':
+                    x_expr = 'iw*0.25 - (ih*9/16)/2'; // Center of the left half
+                    break;
+                case 'derecha':
+                    x_expr = 'iw*0.75 - (ih*9/16)/2'; // Center of the right half
+                    break;
+                case 'centro':
+                default:
+                    x_expr = '(iw-ih*9/16)/2'; // Center of the full video
+                    break;
+            }
 
-          switch (speaker?.position) {
-              case 'izquierda':
-                  x_expr = 'iw*0.25 - (ih*9/16)/2'; // Center of the left half
-                  break;
-              case 'derecha':
-                  x_expr = 'iw*0.75 - (ih*9/16)/2'; // Center of the right half
-                  break;
-              case 'centro':
-              default:
-                  x_expr = '(iw-ih*9/16)/2'; // Center of the full video
-                  break;
-          }
+            // Adjust segment times to be relative to the clip's start time
+            const relativeStartTime = segment.startTime - clipStartTime;
+            const relativeEndTime = segment.endTime - clipStartTime;
+            
+            // Generate a crop filter that is only active during the segment's timeframe
+            const cropFilter = `crop=w=ih*9/16:h=ih:x=${x_expr}:y=0:enable='between(t,${relativeStartTime},${relativeEndTime})'`;
+            videoFilters.push(cropFilter);
+        });
 
-          const tempClipPath = path.join(tempDir, `temp_clip_${i}.ts`);
-          const cropFilter = `crop=w=ih*9/16:h=ih:x=${x_expr}:y=0,scale=1080:1920,setsar=1`;
-          const duration = segment.endTime - segment.startTime;
+        // Chain all the timeline-enabled crop filters together
+        const complexFilter = videoFilters.join(',') + ",scale=1080:1920,setsar=1";
 
-          // Use -ss before -i for faster seeking. Use veryfast preset for speed.
-          const cutCommand = `ffmpeg -y -ss ${segment.startTime} -i "${originalVideoPath}" -t ${duration} -vf "${cropFilter}" -c:v libx264 -preset veryfast -c:a aac -f mpegts "${tempClipPath}"`;
-          
-          console.log(`Generating segment ${i}: ${cutCommand}`);
-          execSync(cutCommand);
-          tempClips.push(tempClipPath);
-          fs.appendFileSync(concatListPath, `file '${path.basename(tempClipPath)}'\n`);
-        }
-        
-        // Use -f concat -safe 0 to allow relative paths in the concat list.
-        finalFfmpegCommand = `ffmpeg -y -f concat -safe 0 -i "${concatListPath}" -c copy "${outputClipPath}"`;
-        console.log(`Concatenating segments: ${finalFfmpegCommand}`);
-        // Execute concat from within the tempDir to handle relative paths correctly
-        execSync(finalFfmpegCommand, { cwd: tempDir });
+        // The -ss parameter goes before -i for fast seeking. -t specifies the clip duration.
+        finalFfmpegCommand = `ffmpeg -y -ss ${clipStartTime} -i "${originalVideoPath}" -t ${clipDuration} -vf "${complexFilter}" -c:v libx264 -preset veryfast -c:a aac "${outputClipPath}"`;
     }
+
+    console.log(`Executing FFmpeg command: ${finalFfmpegCommand}`);
+    execSync(finalFfmpegCommand);
     
     if (!fs.existsSync(outputClipPath)) {
         throw new Error("ffmpeg command did not produce an output file.");
