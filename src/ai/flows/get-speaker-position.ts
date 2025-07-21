@@ -6,6 +6,7 @@
  */
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
+import { googleAI } from '@genkit-ai/googleai';
 
 // Define the schema for a speaker identified in the video
 const SpeakerSchema = z.object({
@@ -33,6 +34,7 @@ const speakerPositionPrompt = ai.definePrompt({
     name: 'speakerPositionPrompt',
     input: { schema: GetSpeakerPositionInputSchema },
     output: { schema: GetSpeakerPositionOutputSchema },
+    model: googleAI.model('gemini-1.5-flash'), // <-- FIX: Explicitly define the model to use
     prompt: `Eres un experto en análisis de video. Tu única tarea es identificar a la persona principal en el siguiente video y determinar su posición en el cuadro.
 
 Devuelve un solo objeto 'speaker' con un ID, una breve descripción y su posición ('izquierda', 'derecha', 'centro'). Si no hay una persona clara, devuelve un objeto vacío.
