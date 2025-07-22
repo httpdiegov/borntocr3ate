@@ -81,7 +81,7 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
       throw new Error("No transcription segments found in the specified time range to create a clip.");
     }
     
-    const speakerPositions = new Map(speakers.map(s => [s.id, s.faceCoordinates]));
+    const speakerPositions = new Map(input.speakers.map(s => [s.id, s.faceCoordinates]));
 
     const ih = 1080;
     const iw = 1920;
@@ -93,16 +93,22 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
     const keyframes: { time: number; cropX: number }[] = [];
     if (relevantTranscription.length > 0) {
         for (const segment of relevantTranscription) {
-            const cropX = Math.max(0, Math.min(iw - cropWidth, Math.floor(segment.faceCoordinates.x * iw - cropWidth / 2)));
+            const speakerPos = speakerPositions.get(segment.speakerId);
+            if (!speakerPos) continue; // Skip if speaker has no defined position
+
+            const cropX = Math.max(0, Math.min(iw - cropWidth, Math.floor(speakerPos.x * iw - cropWidth / 2)));
             // Add keyframe if it's the first one or the position has changed significantly.
             if (keyframes.length === 0 || Math.abs(cropX - keyframes[keyframes.length - 1].cropX) > 5) {
                 keyframes.push({ time: segment.startTime, cropX });
             }
         }
         // If all segments are at the same position, ensure at least one keyframe exists.
-        if (keyframes.length === 0) {
-             const cropX = Math.max(0, Math.min(iw - cropWidth, Math.floor(relevantTranscription[0].faceCoordinates.x * iw - cropWidth / 2)));
-             keyframes.push({ time: relevantTranscription[0].startTime, cropX });
+        if (keyframes.length === 0 && relevantTranscription.length > 0) {
+             const firstSpeakerPos = speakerPositions.get(relevantTranscription[0].speakerId);
+             if (firstSpeakerPos) {
+                const cropX = Math.max(0, Math.min(iw - cropWidth, Math.floor(firstSpeakerPos.x * iw - cropWidth / 2)));
+                keyframes.push({ time: relevantTranscription[0].startTime, cropX });
+             }
         }
     }
 
@@ -155,13 +161,13 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
         success: true, 
         message: `Clip created successfully! Saved to ${outputClipPath}`,
         filePath: outputClipPath,
-        ffmpegCommand: ffmpegCommand
+        ffmpegCommand: allFfmpegCommands
     };
 
   } catch (error: any) {
     console.error('Failed to create video clip:', error);
     const errorMessage = error.stderr ? error.stderr.toString() : error.message;
-    return { success: false, message: `Failed to create clip: ${errorMessage}`, ffmpegCommand: ffmpegCommand };
+    return { success: false, message: `Failed to create clip: ${errorMessage}`, ffmpegCommand: allFfmpegCommands };
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }

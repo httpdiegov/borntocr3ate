@@ -17,6 +17,7 @@
 /.next/
 /out/
 
+
 # production
 /build
 
@@ -46,3 +47,4 @@ firestore-debug.log
 
 
 google-credentials.json
+/videos/
