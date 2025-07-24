@@ -1,9 +1,10 @@
+
 'use server';
 
 /**
  * @fileOverview A flow for creating a vertical video clip from a larger video using ffmpeg.
- * This version uses a robust, single-command `filter_complex` approach to ensure perfect sync.
- * It performs all mathematical calculations in TypeScript to avoid OS-specific command-line parsing issues.
+ * This version uses a robust, single-command `filter_complex` approach to ensure perfect sync
+ * and adds dynamic, styled subtitles to the output video.
  */
 
 import { z } from 'zod';
@@ -26,7 +27,7 @@ const SpeakerSchema = z.object({
   faceCoordinates: FaceCoordinatesSchema.describe("The single, most representative (stable) position of the speaker's face throughout the video."),
 });
 
-// Define the schema for a segment of the transcription, which no longer needs coordinates
+// Define the schema for a segment of the transcription
 const TranscriptionSegmentSchema = z.object({
     speakerId: z.string().describe('The ID of the speaker for this segment.'),
     text: z.string().describe('The transcribed text.'),
@@ -52,6 +53,11 @@ const CreateVideoClipOutputSchema = z.object({
     ffmpegCommand: z.string().describe("A summary of the ffmpeg commands that were generated.")
 });
 export type CreateVideoClipOutput = z.infer<typeof CreateVideoClipOutputSchema>;
+
+// Helper function to escape text for ffmpeg filter
+const escapeFfmpegText = (text: string) => {
+    return text.replace(/[\\:']/g, '\\$&');
+};
 
 async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipOutput> {
   const { videoUrl, clipStartTime, clipEndTime, clipTitle, transcription } = input;
@@ -86,23 +92,20 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
     const ih = 1080;
     const iw = 1920;
     const cropWidth = Math.floor(ih * 9 / 16);
-    const panDuration = 1.0; // Pan duration in seconds
+    const panDuration = 1.0; 
     const panHalf = panDuration / 2;
 
-    // Create a list of unique camera positions (keyframes) based on speaker changes.
     const keyframes: { time: number; cropX: number }[] = [];
     if (relevantTranscription.length > 0) {
         for (const segment of relevantTranscription) {
             const speakerPos = speakerPositions.get(segment.speakerId);
-            if (!speakerPos) continue; // Skip if speaker has no defined position
+            if (!speakerPos) continue; 
 
             const cropX = Math.max(0, Math.min(iw - cropWidth, Math.floor(speakerPos.x * iw - cropWidth / 2)));
-            // Add keyframe if it's the first one or the position has changed significantly.
             if (keyframes.length === 0 || Math.abs(cropX - keyframes[keyframes.length - 1].cropX) > 5) {
                 keyframes.push({ time: segment.startTime, cropX });
             }
         }
-        // If all segments are at the same position, ensure at least one keyframe exists.
         if (keyframes.length === 0 && relevantTranscription.length > 0) {
              const firstSpeakerPos = speakerPositions.get(relevantTranscription[0].speakerId);
              if (firstSpeakerPos) {
@@ -112,15 +115,11 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
         }
     }
 
-    // Build the ffmpeg filter expression for smooth panning.
     let x_expr: string;
     if (keyframes.length <= 1) {
-        // If one or zero keyframes, the crop position is static.
         const cropX = keyframes.length > 0 ? keyframes[0].cropX : (iw - cropWidth) / 2;
         x_expr = `${cropX}`;
     } else {
-        // Build a chained if-expression for the crop's x position.
-        // The expression is built backwards for correct ffmpeg filtergraph nesting.
         let chained_expr = `${keyframes[keyframes.length - 1].cropX}`;
         for (let i = keyframes.length - 2; i >= 0; i--) {
             const curr = keyframes[i];
@@ -134,18 +133,27 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
         x_expr = chained_expr;
     }
 
+    const subtitlesFilter = relevantTranscription.map(sub => {
+        const text = escapeFfmpegText(sub.text);
+        const start = sub.startTime - clipStartTime;
+        const end = sub.endTime - clipStartTime;
+        const duration = end - start;
+        // Fade in/out duration for subtitles
+        const fadeDuration = Math.min(0.2, duration / 4);
+
+        // This creates the "viral" subtitle look
+        return `drawtext=text='${text}':fontfile='C\\:/Windows/Fonts/arialbd.ttf':fontsize=80:fontcolor=white:x=(w-text_w)/2:y=(h*0.85)-text_h/2:box=1:boxcolor=black@0.5:boxborderw=20:enable='between(t,${start},${end})':alpha='if(lt(t,${start}+${fadeDuration}),(t-${start})/${fadeDuration},if(lt(t,${end}-${fadeDuration}),1,((${end}-t))/${fadeDuration}))'`;
+    }).join(',');
+
     const clipDuration = clipEndTime - clipStartTime;
     const tempVideoPath = path.join(tempDir, 'temp_video.mp4');
 
-    // A single ffmpeg command to crop, pan, and scale the video. Audio is handled separately.
-    const videoProcessingCommand = `ffmpeg -y -ss ${clipStartTime} -t ${clipDuration} -i "${originalVideoPath}" -vf "crop=${cropWidth}:${ih}:x='${x_expr}':y=0,scale=1080:1920,setsar=1" -c:v libx264 -preset veryfast -an "${tempVideoPath}"`;
+    const videoProcessingCommand = `ffmpeg -y -ss ${clipStartTime} -t ${clipDuration} -i "${originalVideoPath}" -vf "crop=${cropWidth}:${ih}:x='${x_expr}':y=0,scale=1080:1920,setsar=1,${subtitlesFilter}" -c:v libx264 -preset veryfast -an "${tempVideoPath}"`;
     
-    console.log('Processing video with smooth panning...');
+    console.log('Processing video with smooth panning and subtitles...');
     allFfmpegCommands = videoProcessingCommand + "\n\n";
     execSync(videoProcessingCommand, { stdio: 'inherit' });
 
-    // Final command to mux the processed video with the original audio track.
-    // Using -c:v copy is efficient as the video is already encoded.
     const finalCommand = `ffmpeg -y -i "${tempVideoPath}" -ss ${clipStartTime} -t ${clipDuration} -i "${originalVideoPath}" -c:v copy -c:a aac -map 0:v:0 -map 1:a:0 "${outputClipPath}"`;
     console.log('Adding original audio to the final clip...');
     allFfmpegCommands += finalCommand;
@@ -181,4 +189,5 @@ export const createVideoClip = ai.defineFlow(
     },
     createClip
 );
+
     
