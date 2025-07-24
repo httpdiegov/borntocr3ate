@@ -13,7 +13,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { transcriptionSchema } from '../../remotion/schemas';
-import { getAudioDurationInSeconds } from '@remotion/prober';
+import { getAudioDurationInSeconds } from 'remotion';
 
 
 const AddSubtitlesInputSchema = z.object({
