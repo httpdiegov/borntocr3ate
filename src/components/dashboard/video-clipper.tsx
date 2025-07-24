@@ -34,7 +34,7 @@ const formatTimestamp = (seconds: number) => {
 type AnalysisState = {
   clips: AnalyzedClip[];
   speakers: Speaker[];
-  transcription: TranscriptionSegment[];
+  fullTranscription: TranscriptionSegment[];
   videoInfo: GenerateUploadUrlOutput;
 };
 
@@ -111,8 +111,9 @@ function SmartClipperTab() {
           clipStartTime: clip.startTime, 
           clipEndTime: clip.endTime, 
           clipTitle: clip.title,
+          clipTranscription: clip.transcription,
           speakers: analysisResult.speakers,
-          transcription: analysisResult.transcription,
+          fullTranscription: analysisResult.fullTranscription,
       });
 
       if (result.success && result.filePath) {
@@ -162,7 +163,7 @@ function SmartClipperTab() {
                       {formatTimestamp(clip.startTime)} - {formatTimestamp(clip.endTime)}
                     </Badge>
                   </div>
-                  <p className="text-sm text-muted-foreground break-words w-full">{clip.summary}</p>
+                  <p className="text-sm text-muted-foreground break-words w-full">{clip.transcription}</p>
                   {speaker && <Badge variant="outline"><User className="h-3 w-3 mr-1.5" />Orador Principal: {speaker.description}</Badge>}
                   <div className="flex gap-2 pt-2">
                     <Button size="sm" variant="outline" className="w-full" disabled={clipState.isLoading || !!clipState.resultPath} onClick={() => handleCreateClip(clip)}>
@@ -247,7 +248,8 @@ function ManualReframeTab() {
         clipStartTime: 0,
         clipEndTime: 9999, // Process the whole clip by setting a very high end time
         speakers: analysisResult.speakers,
-        transcription: analysisResult.transcription,
+        fullTranscription: analysisResult.fullTranscription,
+        clipTranscription: analysisResult.fullTranscription.map(t => t.text).join(' '),
         clipTitle: `reframed_${videoFile.name}`
       });
 

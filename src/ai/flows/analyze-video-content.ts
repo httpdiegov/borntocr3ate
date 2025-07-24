@@ -37,7 +37,7 @@ export type AnalyzeVideoInput = z.infer<typeof AnalyzeVideoInputSchema>;
 const AnalyzedClipSchema = z.object({
   id: z.string().describe('A unique identifier for the clip.'),
   title: z.string().describe('A short, catchy title for the clip.'),
-  summary: z.string().describe('A summary of the clip content.'),
+  transcription: z.string().describe('The exact, word-for-word transcription of the clip content.'),
   startTime: z.number().describe('Start time of the clip in seconds.'),
   endTime: z.number().describe('End time of the clip in seconds.'),
   mainSpeakerId: z.string().describe('The ID of the main speaker in this clip.'),
@@ -49,7 +49,7 @@ export type AnalyzedClip = z.infer<typeof AnalyzedClipSchema>;
 // Define the schema for the output of the flow
 const AnalyzeVideoOutputSchema = z.object({
   speakers: z.array(SpeakerSchema).describe('A list of the speakers identified in the video.'),
-  transcription: z.array(TranscriptionSegmentSchema).describe('The full transcription, broken down by speaker and time for each logical sentence or phrase.'),
+  fullTranscription: z.array(TranscriptionSegmentSchema).describe('The full transcription, broken down by speaker and time for each logical sentence or phrase.'),
   clips: z.array(AnalyzedClipSchema).describe('A list of the most interesting clips found in the video.'),
 });
 export type AnalyzeVideoOutput = z.infer<typeof AnalyzeVideoOutputSchema>;
@@ -76,10 +76,10 @@ const analyzeVideoContentFlow = ai.defineFlow(
     }
 
     const { output } = await ai.generate({
-        model: 'googleai/gemini-2.5-pro',
+        model: 'googleai/gemini-1.5-pro',
         output: { schema: AnalyzeVideoOutputSchema },
         prompt: [
-            { text: `Eres un experto editor de video para redes sociales. Tu tarea es analizar el siguiente video para preparar la creación de clips verticales.\n\n**Instrucciones Clave:**\n\n1.  **Identificar Oradores y su Posición Estable**: \n    *   Identifica a cada persona que habla en el video. Asigna un ID único (ej: "orador_1") y una descripción para cada uno.\n    *   Para cada orador, determina la posición facial **más común y representativa** a lo largo del video. Esta será su \`faceCoordinates\` fija. Esto es clave para un encuadre estable.\n\n2.  **Transcripción y Atribución Inteligente**: \n    *   Transcribe el audio completo.\n    *   Para cada frase, atribúyela al orador correcto (\`speakerId\`). Usa una combinación de la evidencia visual (quién parece estar hablando) y el contexto del audio para tomar una decisión segura.\n    *   **Regla Importante**: No cambies de orador en medio de una oración o frase coherente. Mantén la atribución al mismo orador hasta que haya una pausa clara o un cambio de turno evidente en la conversación.\n\n3.  **Extracción de Clips Virales**:\n    *   Basado en la transcripción, identifica de 2 a 4 momentos de alto impacto.\n    *   Define el \`title\`, \`summary\`, \`startTime\`, \`endTime\`, \`mainSpeakerId\` y \`viralityScore\` para cada uno.\n\nEl objetivo es un análisis preciso que permita una edición de video lógica y de alta calidad. Proporciona la salida en el formato JSON solicitado.`},
+            { text: `Eres un experto editor de video para redes sociales. Tu tarea es analizar el siguiente video para preparar la creación de clips verticales.\n\n**Instrucciones Clave:**\n\n1.  **Identificar Oradores y su Posición Estable**: \n    *   Identifica a cada persona que habla en el video. Asigna un ID único (ej: "orador_1") y una descripción para cada uno.\n    *   Para cada orador, determina la posición facial **más común y representativa** a lo largo del video. Esta será su \`faceCoordinates\` fija. Esto es clave para un encuadre estable.\n\n2.  **Transcripción Completa y Atribución Inteligente**: \n    *   Transcribe el audio completo y devuélvelo en \`fullTranscription\`.\n    *   Para cada frase, atribúyela al orador correcto (\`speakerId\`). Usa una combinación de la evidencia visual (quién parece estar hablando) y el contexto del audio para tomar una decisión segura.\n    *   **Regla Importante**: No cambies de orador en medio de una oración o frase coherente. Mantén la atribución al mismo orador hasta que haya una pausa clara o un cambio de turno evidente en la conversación.\n\n3.  **Extracción de Clips Virales**:\n    *   Basado en la transcripción, identifica de 2 a 4 momentos de alto impacto.\n    *   Define el \`title\`, \`startTime\`, \`endTime\`, \`mainSpeakerId\` y \`viralityScore\` para cada uno.\n    *   **CRÍTICO**: Para el campo \`transcription\` de cada clip, proporciona la **transcripción literal y exacta, palabra por palabra**, del audio contenido dentro de ese \`startTime\` y \`endTime\`. NO generes un resumen, sino la transcripción fiel.\n\nEl objetivo es un análisis preciso que permita una edición de video lógica y de alta calidad. Proporciona la salida en el formato JSON solicitado.`},
         ],
         media: [
             {
@@ -100,7 +100,7 @@ const analyzeVideoContentFlow = ai.defineFlow(
     
     output.clips.sort((a: AnalyzedClip, b: AnalyzedClip) => b.viralityScore - a.viralityScore);
 
-    console.log(`Análisis completo. Se encontraron ${output.clips.length} clips, ${output.speakers.length} oradores y ${output.transcription.length} segmentos de transcripción.`);
+    console.log(`Análisis completo. Se encontraron ${output.clips.length} clips, ${output.speakers.length} oradores y ${output.fullTranscription.length} segmentos de transcripción.`);
     return output;
   }
 );

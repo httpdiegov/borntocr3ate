@@ -28,11 +28,18 @@ const SpeakerSchema = z.object({
 });
 
 // Define the schema for a segment of the transcription
-const TranscriptionSegmentSchema = z.object({
+const FullTranscriptionSegmentSchema = z.object({
     speakerId: z.string().describe('The ID of the speaker for this segment.'),
     text: z.string().describe('The transcribed text.'),
     startTime: z.number().describe('Start time in seconds.'),
     endTime: z.number().describe('End time in seconds.'),
+});
+
+// Schema for the smaller, formatted subtitle segments
+const SubtitleSegmentSchema = z.object({
+    text: z.string(),
+    startTime: z.number(),
+    endTime: z.number(),
 });
 
 
@@ -41,8 +48,9 @@ const CreateVideoClipInputSchema = z.object({
   clipStartTime: z.number().describe('Start time of the clip in seconds.'),
   clipEndTime: z.number().describe('End time of the clip in seconds.'),
   clipTitle: z.string().describe('The title of the clip, used for the output filename.'),
+  clipTranscription: z.string().describe('The exact transcription of the clip.'),
   speakers: z.array(SpeakerSchema).describe('List of all speakers identified in the video, with their fixed face coordinates.'),
-  transcription: z.array(TranscriptionSegmentSchema).describe('Transcription segments with speaker IDs and timings.'),
+  fullTranscription: z.array(FullTranscriptionSegmentSchema).describe('The full transcription of the video with speaker IDs and timings.'),
 });
 export type CreateVideoClipInput = z.infer<typeof CreateVideoClipInputSchema>;
 
@@ -56,11 +64,48 @@ export type CreateVideoClipOutput = z.infer<typeof CreateVideoClipOutputSchema>;
 
 // Helper function to escape text for ffmpeg filter
 const escapeFfmpegText = (text: string) => {
-    return text.replace(/[\\:']/g, '\\$&');
+    return text.replace(/[\\:']/g, '\\$&').replace(/"/g, '\\"');
 };
 
+/**
+ * Splits the full transcription into smaller, timed chunks suitable for viral-style subtitles.
+ * @param fullText The full transcription of the clip.
+ * @param clipStartTime The start time of the clip.
+ * @param clipEndTime The end time of the clip.
+ * @returns An array of SubtitleSegment objects.
+ */
+function createSubtitleSegments(fullText: string, clipStartTime: number, clipEndTime: number): z.infer<typeof SubtitleSegmentSchema>[] {
+    const words = fullText.split(/\s+/).filter(w => w.length > 0);
+    if (words.length === 0) return [];
+
+    const totalDuration = clipEndTime - clipStartTime;
+    const durationPerWord = totalDuration / words.length;
+
+    const segments: z.infer<typeof SubtitleSegmentSchema>[] = [];
+    let chunk: string[] = [];
+    let chunkStartTime = clipStartTime;
+
+    for (let i = 0; i < words.length; i++) {
+        chunk.push(words[i]);
+        if (chunk.length === 3 || i === words.length - 1) {
+            const segmentText = chunk.join(' ');
+            const segmentEndTime = chunkStartTime + (chunk.length * durationPerWord);
+            segments.push({
+                text: segmentText,
+                startTime: chunkStartTime - clipStartTime, // Relative to clip start
+                endTime: segmentEndTime - clipStartTime,   // Relative to clip start
+            });
+            chunkStartTime = segmentEndTime;
+            chunk = [];
+        }
+    }
+
+    return segments;
+}
+
+
 async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipOutput> {
-  const { videoUrl, clipStartTime, clipEndTime, clipTitle, transcription } = input;
+  const { videoUrl, clipStartTime, clipEndTime, clipTitle, clipTranscription, fullTranscription } = input;
   let allFfmpegCommands = 'Error: Command not generated.';
 
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'clip-processing-'));
@@ -79,14 +124,16 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
     fs.writeFileSync(originalVideoPath, Buffer.from(videoBuffer));
     console.log(`Video downloaded to ${originalVideoPath}`);
 
-    const relevantTranscription = transcription.filter(
+    const relevantTranscriptionForPanning = fullTranscription.filter(
         (seg) => seg.startTime < clipEndTime && seg.endTime > clipStartTime
     ).sort((a, b) => a.startTime - b.startTime);
     
-    if (relevantTranscription.length === 0) {
+    if (relevantTranscriptionForPanning.length === 0) {
       throw new Error("No transcription segments found in the specified time range to create a clip.");
     }
     
+    const subtitleSegments = createSubtitleSegments(clipTranscription, clipStartTime, clipEndTime);
+
     const speakerPositions = new Map(input.speakers.map(s => [s.id, s.faceCoordinates]));
 
     const ih = 1080;
@@ -96,8 +143,8 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
     const panHalf = panDuration / 2;
 
     const keyframes: { time: number; cropX: number }[] = [];
-    if (relevantTranscription.length > 0) {
-        for (const segment of relevantTranscription) {
+    if (relevantTranscriptionForPanning.length > 0) {
+        for (const segment of relevantTranscriptionForPanning) {
             const speakerPos = speakerPositions.get(segment.speakerId);
             if (!speakerPos) continue; 
 
@@ -106,11 +153,11 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
                 keyframes.push({ time: segment.startTime, cropX });
             }
         }
-        if (keyframes.length === 0 && relevantTranscription.length > 0) {
-             const firstSpeakerPos = speakerPositions.get(relevantTranscription[0].speakerId);
+        if (keyframes.length === 0 && relevantTranscriptionForPanning.length > 0) {
+             const firstSpeakerPos = speakerPositions.get(relevantTranscriptionForPanning[0].speakerId);
              if (firstSpeakerPos) {
                 const cropX = Math.max(0, Math.min(iw - cropWidth, Math.floor(firstSpeakerPos.x * iw - cropWidth / 2)));
-                keyframes.push({ time: relevantTranscription[0].startTime, cropX });
+                keyframes.push({ time: relevantTranscriptionForPanning[0].startTime, cropX });
              }
         }
     }
@@ -133,10 +180,10 @@ async function createClip(input: CreateVideoClipInput): Promise<CreateVideoClipO
         x_expr = chained_expr;
     }
 
-    const subtitlesFilter = relevantTranscription.map(sub => {
-        const text = escapeFfmpegText(sub.text);
-        const start = sub.startTime - clipStartTime;
-        const end = sub.endTime - clipStartTime;
+    const subtitlesFilter = subtitleSegments.map(sub => {
+        const text = escapeFfmpegText(sub.text.toUpperCase());
+        const start = sub.startTime;
+        const end = sub.endTime;
         const duration = end - start;
         // Fade in/out duration for subtitles
         const fadeDuration = Math.min(0.2, duration / 4);
@@ -189,5 +236,3 @@ export const createVideoClip = ai.defineFlow(
     },
     createClip
 );
-
-    
