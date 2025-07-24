@@ -55,8 +55,7 @@
     "remotion": "4.0.165",
     "tailwind-merge": "^3.0.1",
     "tailwindcss-animate": "^1.0.7",
-    "zod": "3.22.3",
-    "@remotion/prober": "4.0.165"
+    "zod": "3.22.3"
   },
   "devDependencies": {
     "@types/node": "^20",

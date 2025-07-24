@@ -64,19 +64,16 @@ async function addSubtitles(input: AddSubtitlesInput): Promise<AddSubtitlesOutpu
     const inputProps = {
       // Pass the local video file path to Remotion component
       videoPath: tempVideoFile,
-      transcriptionPath: propsFile, // Pass path to transcription JSON
+      transcription: transcription, // Pass transcription object directly
     };
-
-    // Write transcription data to props file, which the component will read
-    fs.writeFileSync(propsFile, JSON.stringify(transcription));
-    console.log(`Wrote transcription data to ${propsFile}`);
+    
+    // Write the props to a file for Remotion to read
+    fs.writeFileSync(propsFile, JSON.stringify(inputProps));
+    console.log(`Wrote input props to ${propsFile}`);
 
     // Command to render the video using Remotion CLI
-    // Ensure Remotion is installed: npm i remotion @remotion/cli
-    // We use tsx to execute the Remotion entry file with TypeScript
     const remotionRoot = path.join(process.cwd(), 'src', 'remotion', 'Root.tsx');
     
-    // Pass the *path* to the props file, not the stringified content
     const command = `npx remotion render ${remotionRoot} SubtitledClip ${outputPath} --props='${JSON.stringify(inputProps)}' --duration-in-frames=${durationInFrames} --gl=angle`;
 
     console.log('Executing Remotion command:', command);
@@ -113,4 +110,3 @@ export const addSubtitlesToVideo = ai.defineFlow(
     },
     addSubtitles
 );
-
