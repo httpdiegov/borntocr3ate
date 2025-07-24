@@ -21,12 +21,15 @@ export const RemotionRoot: React.FC = () => {
 			fps={30}
 			width={1080}
 			height={1920}
-			// The schema now expects paths
+			// The schema now expects the data directly
 			schema={subtitledClipSchema}
 			defaultProps={{
-				// These are just placeholder paths for the Remotion Studio
-				videoPath: 'https://storage.googleapis.com/538838696347-media/video-cortado.mp4',
-				transcriptionPath: '',
+				// These are just placeholder values for the Remotion Studio
+				videoUrl: 'https://storage.googleapis.com/538838696347-media/video-cortado.mp4',
+				transcription: {
+					titulo: 'Placeholder',
+					segments: []
+				}
 			}}
 		/>
 	);
