@@ -1,0 +1,37 @@
+diff --git a/node_modules/@remotion/cli/dist/webpack/get-webpack-config.js b/node_modules/@remotion/cli/dist/webpack/get-webpack-config.js
+index f30f785..5a73e34 100644
+--- a/node_modules/@remotion/cli/dist/webpack/get-webpack-config.js
++++ b/node_modules/@remotion/cli/dist/webpack/get-webpack-config.js
+@@ -107,6 +107,13 @@ const getWebpackConfig = async ({
+                 "react-dom": require.resolve("react-dom"),
+                 "react-dom/client": require.resolve("react-dom/client"),
+             },
++            fallback: {
++                ...(!isPlayer
++                    ? {
++                        "react-dom": false,
++                    }
++                    : {}),
++            },
+         },
+         module: {
+             rules: [
+diff --git a/node_modules/@remotion/cli/dist/webpack/get-webpack-config.mjs b/node_modules/@remotion/cli/dist/webpack/get-webpack-config.mjs
+index 735166c..e0045d9 100644
+--- a/node_modules/@remotion/cli/dist/webpack/get-webpack-config.mjs
++++ b/node_modules/@remotion/cli/dist/webpack/get-webpack-config.mjs
+@@ -102,6 +102,13 @@ const getWebpackConfig = async ({
+                 "react-dom": require.resolve("react-dom"),
+                 "react-dom/client": require.resolve("react-dom/client"),
+             },
++            fallback: {
++                ...(!isPlayer
++                    ? {
++                        "react-dom": false,
++                    }
++                    : {}),
++            },
+         },
+         module: {
+             rules: [
+

@@ -34,7 +34,6 @@ async function addSubtitles(input: AddSubtitlesInput): Promise<AddSubtitlesOutpu
   const { videoUrl, transcription, outputFilename } = input;
 
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'remotion-render-'));
-  const propsFile = path.join(tempDir, 'input-props.json');
   const tempVideoFile = path.join(tempDir, 'input.mp4');
   
   const videosDir = path.join(process.cwd(), 'videos');
@@ -67,14 +66,12 @@ async function addSubtitles(input: AddSubtitlesInput): Promise<AddSubtitlesOutpu
       transcription: transcription, // Pass transcription object directly
     };
     
-    // Write the props to a file for Remotion to read
-    fs.writeFileSync(propsFile, JSON.stringify(inputProps));
-    console.log(`Wrote input props to ${propsFile}`);
+    const propsString = JSON.stringify(inputProps).replace(/'/g, "'\\''");
 
     // Command to render the video using Remotion CLI
     const remotionRoot = path.join(process.cwd(), 'src', 'remotion', 'Root.tsx');
     
-    const command = `npx remotion render ${remotionRoot} SubtitledClip ${outputPath} --props='${JSON.stringify(inputProps)}' --duration-in-frames=${durationInFrames} --gl=angle`;
+    const command = `npx remotion render ${remotionRoot} SubtitledClip ${outputPath} --props='${propsString}' --duration-in-frames=${durationInFrames} --gl=angle`;
 
     console.log('Executing Remotion command:', command);
     execSync(command, { stdio: 'inherit' });

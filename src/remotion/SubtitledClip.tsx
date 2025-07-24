@@ -1,4 +1,3 @@
-
 import { z } from 'zod';
 import { AbsoluteFill, Video, useCurrentFrame, useVideoConfig } from 'remotion';
 import { Word } from './Word';

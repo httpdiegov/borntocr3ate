@@ -27,7 +27,10 @@ export const RemotionRoot: React.FC = () => {
 			defaultProps={{
 				// These are just placeholder paths for the Remotion Studio
 				videoPath: 'https://storage.googleapis.com/538838696347-media/video-cortado.mp4',
-				transcriptionPath: '',
+				transcription: {
+					"titulo": "dummy",
+					"segments": [],
+				}
 			}}
 		/>
 	);

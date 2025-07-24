@@ -1,6 +1,6 @@
 "use client";
 
-import React from 'react';
+import * as React from 'react';
 import { interpolate, useCurrentFrame } from 'remotion';
 
 const FONT_FAMILY = 'Arial, Helvetica, sans-serif';
