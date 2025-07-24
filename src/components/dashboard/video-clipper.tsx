@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState } from "react";
@@ -12,11 +13,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Film, Bot, Loader2, Scissors, User, Clock, Wand, Settings, CheckCircle, AlertTriangle } from "lucide-react";
+import { Film, Bot, Loader2, Scissors, User, Clock, Wand, Settings, CheckCircle, AlertTriangle, FileJson, Video } from "lucide-react";
 import { analyzeVideoContent, type AnalyzedClip, type Speaker, type TranscriptionSegment } from "@/ai/flows/analyze-video-content";
 import { generateUploadUrl, type GenerateUploadUrlOutput } from "@/ai/flows/generate-upload-url";
 import { finalizeUpload } from "@/ai/flows/finalize-upload";
-import { createVideoClip } from "@/ai/flows/create-video-clip";
+import { addSubtitlesToVideo } from "@/ai/flows/add-subtitles-to-video";
 import { Badge } from "../ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "../ui/label";
@@ -100,35 +101,6 @@ function SmartClipperTab() {
     }
   };
 
-  const handleCreateClip = async (clip: AnalyzedClip) => {
-    if (!analysisResult) return;
-    setClipProcessingState(prev => ({ ...prev, [clip.id]: { isLoading: true } }));
-    toast({ title: "Creando clip dinámico...", description: "Esto puede tardar un momento. Requiere ffmpeg y ffprobe instalados." });
-
-    try {
-      const result = await createVideoClip({ 
-          videoUrl: analysisResult.videoInfo.publicUrl, 
-          clipStartTime: clip.startTime, 
-          clipEndTime: clip.endTime, 
-          clipTitle: clip.title,
-          clipTranscription: clip.transcription,
-          speakers: analysisResult.speakers,
-          fullTranscription: analysisResult.fullTranscription,
-      });
-
-      if (result.success && result.filePath) {
-        setClipProcessingState(prev => ({ ...prev, [clip.id]: { isLoading: false, resultPath: result.filePath, ffmpegCommand: result.ffmpegCommand } }));
-        toast({ title: "¡Clip Guardado!", description: `El clip se ha guardado en: ${result.filePath}` });
-      } else {
-        throw new Error(result.message);
-      }
-    } catch (error: any) {
-      console.error("Error creating clip:", error);
-      toast({ title: "Error al Crear Clip", description: error.message || "No se pudo generar el clip.", variant: "destructive" });
-      setClipProcessingState(prev => ({ ...prev, [clip.id]: { isLoading: false } }));
-    }
-  };
-
   const isLoading = isUploading || isAnalyzing;
   const loadingStep = isUploading ? "Subiendo..." : "Analizando...";
 
@@ -165,22 +137,6 @@ function SmartClipperTab() {
                   </div>
                   <p className="text-sm text-muted-foreground break-words w-full">{clip.transcription}</p>
                   {speaker && <Badge variant="outline"><User className="h-3 w-3 mr-1.5" />Orador Principal: {speaker.description}</Badge>}
-                  <div className="flex gap-2 pt-2">
-                    <Button size="sm" variant="outline" className="w-full" disabled={clipState.isLoading || !!clipState.resultPath} onClick={() => handleCreateClip(clip)}>
-                      {clipState.isLoading ? <Loader2 className="animate-spin mr-2" /> : (clipState.resultPath ? <CheckCircle className="mr-2 h-4 w-4 text-green-500" /> : <Scissors className="mr-2 h-4 w-4" />)}
-                      {clipState.isLoading ? "Procesando..." : (clipState.resultPath ? "¡Guardado!" : "Crear Clip Dinámico")}
-                    </Button>
-                  </div>
-                  {clipState.resultPath && (
-                    <Card className="mt-2 text-center bg-green-950/50 border-green-500/20">
-                      <CardContent className="p-3">
-                         <p className="text-sm text-green-300">Video guardado en la carpeta `videos` de tu proyecto.</p>
-                      </CardContent>
-                    </Card>
-                  )}
-                  {clipState.ffmpegCommand && (
-                    <Card className="mt-2"><CardHeader className="p-2"><CardTitle className="text-sm">Comando FFMPEG Generado</CardTitle></CardHeader><CardContent className="p-2"><pre className="text-xs bg-muted p-2 rounded-md overflow-x-auto"><code>{clipState.ffmpegCommand}</code></pre></CardContent></Card>
-                  )}
                 </CardContent>
               </Card>
             )
@@ -197,71 +153,79 @@ function SmartClipperTab() {
   );
 }
 
-function ManualReframeTab() {
+function SubtitlerTab() {
   const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [jsonFile, setJsonFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [result, setResult] = useState<{ path: string; command: string } | null>(null);
+  const [result, setResult] = useState<{ path: string } | null>(null);
   const { toast } = useToast();
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleVideoFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) {
-      if (file.type.startsWith("video/")) {
-        setVideoFile(file);
-        setResult(null);
-        toast({ title: "Clip seleccionado", description: file.name });
-      } else {
-        toast({ title: "Tipo de archivo inválido", description: "Por favor, selecciona un archivo de video.", variant: "destructive" });
-      }
+    if (file && file.type.startsWith("video/")) {
+      setVideoFile(file);
+      setResult(null);
+    } else {
+      setVideoFile(null);
+      toast({ title: "Tipo de archivo inválido", description: "Por favor, selecciona un archivo de video MP4.", variant: "destructive" });
+    }
+  };
+  
+  const handleJsonFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file && file.type === "application/json") {
+      setJsonFile(file);
+      setResult(null);
+    } else {
+      setJsonFile(null);
+      toast({ title: "Tipo de archivo inválido", description: "Por favor, selecciona un archivo JSON.", variant: "destructive" });
     }
   };
 
-  const handleReframe = async () => {
-    if (!videoFile) return;
+  const handleAddSubtitles = async () => {
+    if (!videoFile || !jsonFile) return;
     setResult(null);
     setIsLoading(true);
-    let videoInfo: GenerateUploadUrlOutput;
-    const safeFilename = sanitizeFilename(videoFile.name);
+    let videoUrl: string, jsonUrl: string;
 
     try {
-      toast({ title: "Preparando subida..." });
-      videoInfo = await generateUploadUrl({ filename: safeFilename, contentType: videoFile.type });
-      
-      toast({ title: "Subiendo clip..." });
-      const uploadResponse = await fetch(videoInfo.signedUrl, { method: 'PUT', body: videoFile, headers: { 'Content-Type': videoFile.type } });
-      if (!uploadResponse.ok) throw new Error(`Upload failed with status: ${uploadResponse.status}`);
-      
-      toast({ title: "Finalizando subida..." });
-      const finalizeResult = await finalizeUpload({ gcsUri: videoInfo.gcsUri });
-      if (!finalizeResult.success) throw new Error(finalizeResult.message);
-      
-      toast({ title: "IA analizando video y oradores..." });
-      const analysisResult = await analyzeVideoContent({ publicUrl: videoInfo.publicUrl, contentType: videoFile.type });
+        toast({ title: "Preparando subida de archivos..." });
 
-      if (!analysisResult.speakers || analysisResult.speakers.length === 0) {
-        throw new Error("La IA no pudo identificar a ningún orador en el video.");
-      }
-      
-      toast({ title: "Reencuadrando clip dinámicamente..." });
-      const clipResult = await createVideoClip({
-        videoUrl: videoInfo.publicUrl,
-        clipStartTime: 0,
-        clipEndTime: 9999, // Process the whole clip by setting a very high end time
-        speakers: analysisResult.speakers,
-        fullTranscription: analysisResult.fullTranscription,
-        clipTranscription: analysisResult.fullTranscription.map(t => t.text).join(' '),
-        clipTitle: `reframed_${videoFile.name}`
-      });
+        const videoFilename = sanitizeFilename(videoFile.name);
+        const jsonFilename = sanitizeFilename(jsonFile.name);
 
-      if (clipResult.success && clipResult.filePath) {
-        setResult({ path: clipResult.filePath, command: clipResult.ffmpegCommand });
-        toast({ title: "¡Reencuadre Completo!", description: `El clip vertical ha sido guardado en ${clipResult.filePath}` });
+        // Subir video
+        const videoUploadInfo = await generateUploadUrl({ filename: videoFilename, contentType: videoFile.type });
+        await fetch(videoUploadInfo.signedUrl, { method: 'PUT', body: videoFile, headers: { 'Content-Type': videoFile.type }});
+        await finalizeUpload({ gcsUri: videoUploadInfo.gcsUri });
+        videoUrl = videoUploadInfo.publicUrl;
+        
+        // Subir JSON
+        const jsonUploadInfo = await generateUploadUrl({ filename: jsonFilename, contentType: jsonFile.type });
+        await fetch(jsonUploadInfo.signedUrl, { method: 'PUT', body: jsonFile, headers: { 'Content-Type': jsonFile.type }});
+        await finalizeUpload({ gcsUri: jsonUploadInfo.gcsUri });
+        jsonUrl = jsonUploadInfo.publicUrl;
+
+        toast({ title: "Archivos subidos. Renderizando subtítulos...", description: "Esto puede tardar varios minutos."});
+
+        const transcriptionResponse = await fetch(jsonUrl);
+        const transcriptionData = await transcriptionResponse.json();
+
+        const result = await addSubtitlesToVideo({
+            videoUrl: videoUrl,
+            transcription: transcriptionData,
+            outputFilename: `subtitled_${videoFilename}`
+        });
+
+      if (result.success && result.outputPath) {
+        setResult({ path: result.outputPath });
+        toast({ title: "¡Video con subtítulos creado!", description: `El video se ha guardado en la carpeta 'videos' de tu proyecto.` });
       } else {
-        throw new Error(clipResult.message);
+        throw new Error(result.message || "No se pudo generar el video con subtítulos.");
       }
     } catch (error: any) {
-      console.error("Error during manual reframe:", error);
-      toast({ title: "Error en el Reencuadre", description: error.message || "No se pudo completar el proceso.", variant: "destructive" });
+      console.error("Error adding subtitles:", error);
+      toast({ title: "Error al añadir subtítulos", description: error.message, variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
@@ -269,21 +233,24 @@ function ManualReframeTab() {
 
   return (
     <div className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="manual-video-upload">1. Sube tu clip horizontal</Label>
-        <Input id="manual-video-upload" type="file" accept="video/*" onChange={handleFileChange} disabled={isLoading} />
-      </div>
+        <div className="space-y-2">
+            <Label htmlFor="video-upload" className="flex items-center gap-2"><Video className="h-4 w-4"/> 1. Sube tu video vertical (MP4)</Label>
+            <Input id="video-upload" type="file" accept="video/mp4" onChange={handleVideoFileChange} disabled={isLoading} />
+        </div>
+         <div className="space-y-2">
+            <Label htmlFor="json-upload" className="flex items-center gap-2"><FileJson className="h-4 w-4"/> 2. Sube el JSON de transcripción</Label>
+            <Input id="json-upload" type="file" accept="application/json" onChange={handleJsonFileChange} disabled={isLoading} />
+        </div>
 
-      <Button onClick={handleReframe} className="w-full" disabled={!videoFile || isLoading}>
-        {isLoading ? <Loader2 className="animate-spin mr-2" /> : <Scissors className="mr-2" />}
-        {isLoading ? "Procesando..." : "Reencuadrar Clip Automáticamente"}
+      <Button onClick={handleAddSubtitles} className="w-full" disabled={!videoFile || !jsonFile || isLoading}>
+        {isLoading ? <Loader2 className="animate-spin mr-2" /> : <Wand className="mr-2" />}
+        {isLoading ? "Renderizando Video..." : "Añadir Subtítulos con Remotion"}
       </Button>
 
       {isLoading && (
           <div className="text-center text-muted-foreground py-12">
             <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
-            <p>Subiendo y analizando...</p>
-            <p className="text-sm">Esto puede tardar unos minutos.</p>
+            <p>Renderizando... Esto puede tardar.</p>
           </div>
       )}
 
@@ -295,15 +262,11 @@ function ManualReframeTab() {
                     <p className="text-xs text-muted-foreground">{`Lo encontrarás en: ${result.path}`}</p>
                 </CardContent>
             </Card>
-          <Card className="mt-2">
-            <CardHeader className="p-2"><CardTitle className="text-sm">Comando FFMPEG Generado</CardTitle></CardHeader>
-            <CardContent className="p-2"><pre className="text-xs bg-muted p-2 rounded-md overflow-x-auto"><code>{result.command}</code></pre></CardContent>
-          </Card>
         </div>
       )}
        {!result && !isLoading && (
             <div className="text-center text-muted-foreground py-12">
-              <p>Sube un clip para empezar la prueba de reencuadre.</p>
+              <p>Sube tu video y JSON para empezar.</p>
             </div>
           )
         }
@@ -318,27 +281,27 @@ export default function VideoClipper({ className }: { className?: string }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Film className="h-6 w-6" />
-          Video Clipper
+          Video Tools
         </CardTitle>
         <CardDescription>
-          Usa la IA para encontrar clips o reencuadra un video manualmente a formato vertical.
+          Herramientas de IA para analizar y transformar tus videos.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex-grow space-y-4">
-        <Tabs defaultValue="smart-clipper" className="w-full">
+        <Tabs defaultValue="subtitler" className="w-full">
           <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="smart-clipper">
-                <Wand className="mr-2"/> Smart Clipper
+             <TabsTrigger value="subtitler">
+                <Wand className="mr-2"/> Subtitler AI
             </TabsTrigger>
-            <TabsTrigger value="manual-reframe">
-                <Settings className="mr-2"/> Manual Reframe
+            <TabsTrigger value="smart-clipper">
+                <Scissors className="mr-2"/> Smart Clipper
             </TabsTrigger>
           </TabsList>
+          <TabsContent value="subtitler" className="mt-4">
+            <SubtitlerTab />
+          </TabsContent>
           <TabsContent value="smart-clipper" className="mt-4">
             <SmartClipperTab />
-          </TabsContent>
-          <TabsContent value="manual-reframe" className="mt-4">
-            <ManualReframeTab />
           </TabsContent>
         </Tabs>
       </CardContent>

@@ -14,5 +14,5 @@ import '@/ai/flows/analyze-video-content';
 import '@/ai/flows/transcribe-video';
 import '@/ai/flows/generate-upload-url';
 import '@/ai/flows/finalize-upload';
-import '@/ai/flows/create-video-clip';
+import '@/ai/flows/add-subtitles-to-video';
 import './tools/get-api-key-internal';
