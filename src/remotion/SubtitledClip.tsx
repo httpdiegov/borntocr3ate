@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { AbsoluteFill, Video, useCurrentFrame, useVideoConfig } from 'remotion';
 import { Word } from './Word';
 import { transcriptionSchema } from './schemas';
-import React from 'react';
+import * as React from 'react';
 import fs from 'fs';
 
 // The schema now expects paths to the files, not the data itself.

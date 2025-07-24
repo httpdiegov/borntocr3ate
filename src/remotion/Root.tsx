@@ -1,7 +1,7 @@
 "use client";
 
 import { Composition, getInputProps } from 'remotion';
-import React from 'react';
+import * as React from 'react';
 import { SubtitledClip, subtitledClipSchema } from './SubtitledClip';
 import './style.css';
 import { z } from 'zod';
