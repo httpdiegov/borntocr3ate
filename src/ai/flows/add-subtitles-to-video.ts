@@ -13,7 +13,6 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { transcriptionSchema } from '../../remotion/schemas';
-import { getAudioDurationInSeconds } from 'remotion';
 
 
 const AddSubtitlesInputSchema = z.object({
@@ -56,12 +55,9 @@ async function addSubtitles(input: AddSubtitlesInput): Promise<AddSubtitlesOutpu
     fs.writeFileSync(tempTranscriptionFile, JSON.stringify(transcription));
     console.log(`Transcription file written to ${tempTranscriptionFile}`);
 
-    // 2. Get video duration
-    const videoDurationInSeconds = await getAudioDurationInSeconds(tempVideoFile);
-    if (isNaN(videoDurationInSeconds) || videoDurationInSeconds <= 0) {
-        throw new Error("Could not determine video duration from file.");
-    }
-    const durationInFrames = Math.ceil(videoDurationInSeconds * 30); // Assuming 30 FPS
+    // 2. Set a long duration and let Remotion stop when the video ends.
+    // This avoids calling getAudioDurationInSeconds in a server environment.
+    const durationInFrames = 54000; // 30 minutes at 30 FPS, a safe upper limit.
 
     // 3. Prepare props for Remotion, passing file paths instead of raw data
     const inputProps = {
