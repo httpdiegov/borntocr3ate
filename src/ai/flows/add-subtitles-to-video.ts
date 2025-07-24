@@ -12,8 +12,8 @@ import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { Word, transcriptionSchema } from '../../remotion/schemas';
-import ffprobe from 'ffprobe-static';
+import { transcriptionSchema } from '../../remotion/schemas';
+import { getAudioDurationInSeconds } from '@remotion/prober';
 
 
 const AddSubtitlesInputSchema = z.object({
@@ -29,18 +29,6 @@ const AddSubtitlesOutputSchema = z.object({
     outputPath: z.string().optional().describe("The local path where the final video was saved."),
 });
 export type AddSubtitlesOutput = z.infer<typeof AddSubtitlesOutputSchema>;
-
-async function getVideoDuration(videoPath: string): Promise<number> {
-    try {
-        const command = `"${ffprobe.path}" -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${videoPath}"`;
-        const durationStr = execSync(command).toString().trim();
-        return parseFloat(durationStr);
-    } catch (error) {
-        console.error('Error getting video duration with ffprobe:', error);
-        throw new Error('Could not determine video duration.');
-    }
-}
-
 
 async function addSubtitles(input: AddSubtitlesInput): Promise<AddSubtitlesOutput> {
   const { videoUrl, transcription, outputFilename } = input;
@@ -65,13 +53,10 @@ async function addSubtitles(input: AddSubtitlesInput): Promise<AddSubtitlesOutpu
     fs.writeFileSync(tempVideoFile, videoBuffer);
     console.log('Video downloaded successfully.');
 
-    // Get the actual duration of the downloaded video file
-    const videoDurationInSeconds = await getVideoDuration(tempVideoFile);
+    // Get the actual duration of the downloaded video file using Remotion's prober
+    const videoDurationInSeconds = await getAudioDurationInSeconds(tempVideoFile);
     if (isNaN(videoDurationInSeconds) || videoDurationInSeconds <= 0) {
-        // Fallback to transcription if ffprobe fails, but log a warning
-        console.warn("Could not get duration from ffprobe, falling back to transcription timing.");
-        const fallbackDuration = transcription.segments.reduce((max, seg) => Math.max(max, seg.end), 0);
-        if(fallbackDuration <= 0) throw new Error("Video duration is zero or invalid.");
+        throw new Error("Could not determine video duration from file.");
     }
 
     const durationInFrames = Math.ceil(videoDurationInSeconds * 30); // Assuming 30 FPS
