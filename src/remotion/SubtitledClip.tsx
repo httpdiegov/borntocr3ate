@@ -5,7 +5,7 @@ import { Word } from './Word';
 import { transcriptionSchema } from './schemas';
 import React from 'react';
 export const subtitledClipSchema = z.object({
-	videoUrl: z.string().url(),
+	videoUrl: z.string(), // Can now be a local file path
 	transcription: transcriptionSchema,
 });
 
@@ -21,7 +21,7 @@ export const SubtitledClip: React.FC<z.infer<typeof subtitledClipSchema>> = ({
 	type WordType = (typeof allWords)[number];
 	// Split words into lines of max 3 words
 	const lines: { words: WordType[] }[] = [];
-	let currentLine: { words: WordType[] } = { words: [] };
+	let currentLine: { words: WordType[] } = { words: []};
 	for (const word of allWords) {
 		currentLine.words.push(word);
 		if (currentLine.words.length === 3) {

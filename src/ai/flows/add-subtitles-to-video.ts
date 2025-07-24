@@ -13,6 +13,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { Word, transcriptionSchema } from '../../remotion/schemas';
+import ffprobe from 'ffprobe-static';
 
 
 const AddSubtitlesInputSchema = z.object({
@@ -29,11 +30,24 @@ const AddSubtitlesOutputSchema = z.object({
 });
 export type AddSubtitlesOutput = z.infer<typeof AddSubtitlesOutputSchema>;
 
+async function getVideoDuration(videoPath: string): Promise<number> {
+    try {
+        const command = `"${ffprobe.path}" -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${videoPath}"`;
+        const durationStr = execSync(command).toString().trim();
+        return parseFloat(durationStr);
+    } catch (error) {
+        console.error('Error getting video duration with ffprobe:', error);
+        throw new Error('Could not determine video duration.');
+    }
+}
+
+
 async function addSubtitles(input: AddSubtitlesInput): Promise<AddSubtitlesOutput> {
   const { videoUrl, transcription, outputFilename } = input;
 
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'remotion-render-'));
   const propsFile = path.join(tempDir, 'input-props.json');
+  const tempVideoFile = path.join(tempDir, 'input.mp4');
   
   const videosDir = path.join(process.cwd(), 'videos');
   fs.mkdirSync(videosDir, { recursive: true });
@@ -41,13 +55,30 @@ async function addSubtitles(input: AddSubtitlesInput): Promise<AddSubtitlesOutpu
 
   try {
     console.log(`Starting subtitle render for ${videoUrl}`);
+    
+    // Download the video file to a temporary location
+    console.log(`Downloading video from ${videoUrl} to ${tempVideoFile}`);
+    const response = await fetch(videoUrl);
+    if (!response.ok) throw new Error(`Failed to download video: ${response.statusText}`);
+    // @ts-ignore
+    const videoBuffer = Buffer.from(await response.arrayBuffer());
+    fs.writeFileSync(tempVideoFile, videoBuffer);
+    console.log('Video downloaded successfully.');
 
-    // The duration of the video needs to be calculated from the transcription data
-    const videoDurationInSeconds = transcription.segments.reduce((max, seg) => Math.max(max, seg.end), 0);
+    // Get the actual duration of the downloaded video file
+    const videoDurationInSeconds = await getVideoDuration(tempVideoFile);
+    if (isNaN(videoDurationInSeconds) || videoDurationInSeconds <= 0) {
+        // Fallback to transcription if ffprobe fails, but log a warning
+        console.warn("Could not get duration from ffprobe, falling back to transcription timing.");
+        const fallbackDuration = transcription.segments.reduce((max, seg) => Math.max(max, seg.end), 0);
+        if(fallbackDuration <= 0) throw new Error("Video duration is zero or invalid.");
+    }
+
     const durationInFrames = Math.ceil(videoDurationInSeconds * 30); // Assuming 30 FPS
 
     const inputProps = {
-      videoUrl,
+      // Pass the local video file path to Remotion component
+      videoUrl: tempVideoFile,
       transcription,
     };
 
