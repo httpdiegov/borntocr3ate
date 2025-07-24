@@ -186,30 +186,40 @@ function SubtitlerTab() {
     if (!videoFile || !jsonFile) return;
     setResult(null);
     setIsLoading(true);
-    let videoUrl: string, jsonUrl: string;
 
     try {
         toast({ title: "Preparando subida de archivos..." });
 
         const videoFilename = sanitizeFilename(videoFile.name);
-        const jsonFilename = sanitizeFilename(jsonFile.name);
 
         // Subir video
         const videoUploadInfo = await generateUploadUrl({ filename: videoFilename, contentType: videoFile.type });
         await fetch(videoUploadInfo.signedUrl, { method: 'PUT', body: videoFile, headers: { 'Content-Type': videoFile.type }});
         await finalizeUpload({ gcsUri: videoUploadInfo.gcsUri });
-        videoUrl = videoUploadInfo.publicUrl;
+        const videoUrl = videoUploadInfo.publicUrl;
         
-        // Subir JSON
-        const jsonUploadInfo = await generateUploadUrl({ filename: jsonFilename, contentType: jsonFile.type });
-        await fetch(jsonUploadInfo.signedUrl, { method: 'PUT', body: jsonFile, headers: { 'Content-Type': jsonFile.type }});
-        await finalizeUpload({ gcsUri: jsonUploadInfo.gcsUri });
-        jsonUrl = jsonUploadInfo.publicUrl;
+        toast({ title: "Leyendo archivo de transcripción..."});
 
-        toast({ title: "Archivos subidos. Renderizando subtítulos...", description: "Esto puede tardar varios minutos."});
-
-        const transcriptionResponse = await fetch(jsonUrl);
-        const transcriptionData = await transcriptionResponse.json();
+        // Leer el archivo JSON en el navegador
+        const transcriptionData = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const text = e.target?.result;
+                    if (typeof text === 'string') {
+                        resolve(JSON.parse(text));
+                    } else {
+                        reject(new Error("No se pudo leer el archivo JSON."));
+                    }
+                } catch (err) {
+                    reject(err);
+                }
+            };
+            reader.onerror = (e) => reject(new Error("Error al leer el archivo."));
+            reader.readAsText(jsonFile);
+        });
+        
+        toast({ title: "Archivos listos. Renderizando subtítulos...", description: "Esto puede tardar varios minutos."});
 
         const result = await addSubtitlesToVideo({
             videoUrl: videoUrl,
