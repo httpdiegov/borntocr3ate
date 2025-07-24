@@ -3,21 +3,30 @@ import { AbsoluteFill, Video, useCurrentFrame, useVideoConfig } from 'remotion';
 import { Word } from './Word';
 import { transcriptionSchema } from './schemas';
 import * as React from 'react';
+import fs from 'fs';
 
 // The schema now expects paths to the files, not the data itself.
 export const subtitledClipSchema = z.object({
 	videoPath: z.string(),
-	transcription: transcriptionSchema,
+	transcriptionPath: z.string(),
 });
 
 
 export const SubtitledClip: React.FC<z.infer<typeof subtitledClipSchema>> = ({
 	videoPath,
-	transcription,
+	transcriptionPath,
 }) => {
 	const frame = useCurrentFrame();
 	const { fps } = useVideoConfig();
 	const currentTime = frame / fps;
+
+	const transcription = React.useMemo(() => {
+		if (!transcriptionPath) {
+			return { segments: [] };
+		}
+		const fileContent = fs.readFileSync(transcriptionPath, 'utf-8');
+		return transcriptionSchema.parse(JSON.parse(fileContent));
+	}, [transcriptionPath]);
     
 	const allWords = transcription.segments.flatMap((segment) => segment.words);
 	type WordType = (typeof allWords)[number];
