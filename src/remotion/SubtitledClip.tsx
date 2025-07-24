@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { AbsoluteFill, Video, useCurrentFrame, useVideoConfig } from 'remotion';
 import { Word } from './Word';
 import { transcriptionSchema } from './schemas';
-
+import React from 'react';
 export const subtitledClipSchema = z.object({
 	videoUrl: z.string().url(),
 	transcription: transcriptionSchema,
@@ -18,10 +18,10 @@ export const SubtitledClip: React.FC<z.infer<typeof subtitledClipSchema>> = ({
 	const currentTime = frame / fps;
 
 	const allWords = transcription.segments.flatMap((segment) => segment.words);
-	
+	type WordType = (typeof allWords)[number];
 	// Split words into lines of max 3 words
-	const lines: { words: z.infer<typeof z.array(z.any>>}[] = [];
-	let currentLine: { words: z.infer<typeof z.array(z.any>> } = { words: []};
+	const lines: { words: WordType[] }[] = [];
+	let currentLine: { words: WordType[] } = { words: [] };
 	for (const word of allWords) {
 		currentLine.words.push(word);
 		if (currentLine.words.length === 3) {
