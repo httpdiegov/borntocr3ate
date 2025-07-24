@@ -12,9 +12,7 @@ import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { Word, transcriptionSchema } from '../../remotion/schemas';
-import { getAudioDurationInSeconds } from 'remotion';
-import { transcriptionSchema } from '../../remotion/schemas';
+import { transcriptionSchema } from '@/lib/schemas';
 
 
 const AddSubtitlesInputSchema = z.object({
@@ -67,7 +65,7 @@ async function addSubtitles(input: AddSubtitlesInput): Promise<AddSubtitlesOutpu
       transcriptionPath: tempTranscriptionFile,
     };
     
-    const propsString = JSON.stringify(inputProps).replace(/'/g, "'\\''");
+    const propsString = JSON.stringify(inputProps).replace(/'/g, "'''");
 
     // 4. Command to render the video using Remotion CLI
     const remotionRoot = path.join(process.cwd(), 'src', 'remotion', 'Root.tsx');
