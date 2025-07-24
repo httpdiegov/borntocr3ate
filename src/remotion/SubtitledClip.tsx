@@ -5,18 +5,33 @@ import { AbsoluteFill, Video, useCurrentFrame, useVideoConfig } from 'remotion';
 import { Word } from './Word';
 import { transcriptionSchema } from './schemas';
 import React from 'react';
+import fs from 'fs';
+
+// The schema now expects paths to the files, not the data itself.
 export const subtitledClipSchema = z.object({
-	videoUrl: z.string(), // Can now be a local file path
-	transcription: transcriptionSchema,
+	videoPath: z.string(),
+	transcriptionPath: z.string(),
 });
 
+// Helper function to read and parse the JSON file.
+// This will run in the context of the Remotion render command.
+function getTranscription(transcriptionPath: string): z.infer<typeof transcriptionSchema> {
+    const fileContent = fs.readFileSync(transcriptionPath, 'utf-8');
+    const parsed = JSON.parse(fileContent);
+    return transcriptionSchema.parse(parsed);
+}
+
+
 export const SubtitledClip: React.FC<z.infer<typeof subtitledClipSchema>> = ({
-	videoUrl,
-	transcription,
+	videoPath,
+	transcriptionPath,
 }) => {
 	const frame = useCurrentFrame();
 	const { fps } = useVideoConfig();
 	const currentTime = frame / fps;
+    
+    // Read the transcription data from the file path
+    const transcription = React.useMemo(() => getTranscription(transcriptionPath), [transcriptionPath]);
 
 	const allWords = transcription.segments.flatMap((segment) => segment.words);
 	type WordType = (typeof allWords)[number];
@@ -37,7 +52,7 @@ export const SubtitledClip: React.FC<z.infer<typeof subtitledClipSchema>> = ({
 	return (
 		<AbsoluteFill style={{ backgroundColor: 'black' }}>
 			<AbsoluteFill>
-				<Video src={videoUrl} />
+				<Video src={videoPath} />
 			</AbsoluteFill>
 			<AbsoluteFill style={{
 				justifyContent: 'center',

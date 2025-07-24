@@ -11,43 +11,23 @@ const COMP_ID = 'SubtitledClip';
 
 // You can customize the dimensions and FPS for the video here.
 export const RemotionRoot: React.FC = () => {
+	// This will now get the duration passed from the `addSubtitles` flow
 	const { durationInFrames } = getInputProps() as { durationInFrames: number };
 	
 	return (
 		<Composition
 			id={COMP_ID}
 			component={SubtitledClip}
-			durationInFrames={durationInFrames}
+			durationInFrames={durationInFrames > 0 ? durationInFrames : 1} // Ensure duration is at least 1
 			fps={30}
 			width={1080}
 			height={1920}
-			// You can pass arbitrary props to your component using the schema
+			// The schema now expects paths
 			schema={subtitledClipSchema}
 			defaultProps={{
-				// Default props are used for the Remotion Studio
-				// and can be overridden when rendering programmatically.
-				videoUrl: 'https://storage.googleapis.com/538838696347-media/video-cortado.mp4',
-				transcription: {
-					titulo: 'Default Title',
-					segments: [
-						{
-							id: 0,
-							seek: 0,
-							start: 0,
-							end: 2,
-							text: 'Hello World',
-							tokens: [],
-							temperature: 0,
-							avg_logprob: 0,
-							compression_ratio: 0,
-							no_speech_prob: 0,
-							words: [
-								{ word: 'Hello', start: 0, end: 1, probability: 1 },
-								{ word: 'World', start: 1, end: 2, probability: 1 },
-							],
-						},
-					],
-				},
+				// These are just placeholder paths for the Remotion Studio
+				videoPath: 'https://storage.googleapis.com/538838696347-media/video-cortado.mp4',
+				transcriptionPath: '',
 			}}
 		/>
 	);
