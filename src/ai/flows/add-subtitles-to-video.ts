@@ -68,9 +68,9 @@ async function addSubtitles(input: AddSubtitlesInput): Promise<AddSubtitlesOutpu
     const propsString = JSON.stringify(inputProps).replace(/'/g, "'''");
 
     // 4. Command to render the video using Remotion CLI
-    const remotionRoot = path.join(process.cwd(), 'src', 'remotion', 'Root.tsx');
+    const entryPoint = 'src/remotion/index.ts';
     
-    const command = `npx remotion render ${remotionRoot} SubtitledClip ${outputPath} --props='${propsString}' --duration-in-frames=${durationInFrames} --gl=angle --headless`;
+    const command = `npx remotion render ${entryPoint} SubtitledClip "${outputPath}" --props='${propsString}' --duration-in-frames=${durationInFrames} --gl=angle --headless`;
 
     console.log('Executing Remotion command:', command);
     execSync(command, { stdio: 'inherit' });
