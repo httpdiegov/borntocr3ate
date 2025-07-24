@@ -21,11 +21,17 @@ export const SubtitledClip: React.FC<z.infer<typeof subtitledClipSchema>> = ({
 	const currentTime = frame / fps;
 
 	const transcription = React.useMemo(() => {
-		if (!transcriptionPath) {
+		if (!transcriptionPath || !fs.existsSync(transcriptionPath)) {
+			console.warn('Transcription file path not provided or file does not exist.');
 			return { segments: [] };
 		}
-		const fileContent = fs.readFileSync(transcriptionPath, 'utf-8');
-		return transcriptionSchema.parse(JSON.parse(fileContent));
+		try {
+			const fileContent = fs.readFileSync(transcriptionPath, 'utf-8');
+			return transcriptionSchema.parse(JSON.parse(fileContent));
+		} catch (e) {
+			console.error("Failed to read or parse transcription file:", e);
+			return { segments: [] };
+		}
 	}, [transcriptionPath]);
     
 	const allWords = transcription.segments.flatMap((segment) => segment.words);
