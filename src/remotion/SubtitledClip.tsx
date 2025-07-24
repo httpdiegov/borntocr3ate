@@ -1,7 +1,7 @@
 "use client";
 
 import { z } from 'zod';
-import { AbsoluteFill, Video, useCurrentFrame, useVideoConfig } from 'remotion';
+import { AbsoluteFill, Video, useCurrentFrame } from 'remotion';
 import { Word } from './Word';
 import { transcriptionSchema } from './schemas';
 import * as React from 'react';
@@ -19,21 +19,34 @@ export const SubtitledClip: React.FC<z.infer<typeof subtitledClipSchema>> = ({
 }) => {
 	const frame = useCurrentFrame();
     
+	if (!transcription || !transcription.segments) {
+		// Render just the video if transcription is not available
+		return (
+			<AbsoluteFill>
+				<Video src={videoUrl} />
+			</AbsoluteFill>
+		)
+	}
+
 	const allWords = transcription.segments.flatMap((segment) => segment.words);
 	type WordType = (typeof allWords)[number];
-	// Split words into lines of max 3 words
+	
+	// Split words into lines of max 3 words for better readability
 	const lines: { words: WordType[] }[] = [];
-	let currentLine: { words: WordType[] } = { words: []};
-	for (const word of allWords) {
-		currentLine.words.push(word);
-		if (currentLine.words.length === 3) {
+	if (allWords.length > 0) {
+		let currentLine: { words: WordType[] } = { words: []};
+		for (const word of allWords) {
+			currentLine.words.push(word);
+			if (currentLine.words.length === 3) {
+				lines.push(currentLine);
+				currentLine = { words: []};
+			}
+		}
+		if (currentLine.words.length > 0) {
 			lines.push(currentLine);
-			currentLine = { words: []};
 		}
 	}
-	if (currentLine.words.length > 0) {
-		lines.push(currentLine);
-	}
+
 
 	return (
 		<AbsoluteFill style={{ backgroundColor: 'black' }}>

@@ -3,7 +3,7 @@
 
 /**
  * @fileOverview A flow for adding dynamic, word-by-word subtitles to a video using Remotion.
- * This flow takes a video and a transcription file, and renders a new video with subtitles.
+ * This flow takes a video URL and transcription data, and renders a new video with subtitles.
  */
 
 import { z } from 'zod';
@@ -11,7 +11,6 @@ import { ai } from '@/ai/genkit';
 import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
 import { transcriptionSchema } from '@/lib/schemas';
 
 
@@ -49,16 +48,22 @@ async function addSubtitles(input: AddSubtitlesInput): Promise<AddSubtitlesOutpu
     };
     
     // Escape the JSON string for the shell
+    // On Windows, `cmd.exe` does not handle single quotes well. We need to be careful.
+    // A robust way is to stringify twice.
     const propsString = JSON.stringify(JSON.stringify(inputProps));
 
     // Command to render the video using Remotion CLI
+    // The entry point is now a conventional `src/remotion/index.ts`.
     const entryPoint = 'src/remotion/index.ts';
     
+    // The --headless flag is crucial for server-side rendering without a display.
+    // --chromium-sandbox=false is needed in restricted environments like Docker/some CI tools.
     const command = `npx remotion render ${entryPoint} SubtitledClip "${outputPath}" --props=${propsString} --duration-in-frames=${durationInFrames} --chromium-sandbox=false --headless`;
 
     console.log('Executing Remotion command...');
     execSync(command, { stdio: 'inherit' });
 
+    // Verify that the output file was actually created.
     if (!fs.existsSync(outputPath)) {
         throw new Error("Remotion render did not produce an output file.");
     }
@@ -72,6 +77,7 @@ async function addSubtitles(input: AddSubtitlesInput): Promise<AddSubtitlesOutpu
 
   } catch (error: any) {
     console.error('Failed to render video with Remotion:', error);
+    // Provide a more specific error message if possible
     const errorMessage = error.stderr ? error.stderr.toString() : error.message;
     return { success: false, message: `Render failed: ${errorMessage}` };
   }
