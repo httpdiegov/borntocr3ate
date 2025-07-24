@@ -4,7 +4,6 @@ import { Composition, getInputProps } from 'remotion';
 import * as React from 'react';
 import { SubtitledClip, subtitledClipSchema } from './SubtitledClip';
 import './style.css';
-import { z } from 'zod';
 
 // Each composition needs a unique ID
 const COMP_ID = 'SubtitledClip';

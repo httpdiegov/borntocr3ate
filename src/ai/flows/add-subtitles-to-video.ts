@@ -65,7 +65,8 @@ async function addSubtitles(input: AddSubtitlesInput): Promise<AddSubtitlesOutpu
       transcriptionPath: tempTranscriptionFile,
     };
     
-    const propsString = JSON.stringify(inputProps).replace(/'/g, "'''");
+    // Replace backslashes with forward slashes for cross-platform compatibility in the command
+    const propsString = JSON.stringify(inputProps).replace(/\\/g, '/');
 
     // 4. Command to render the video using Remotion CLI
     const entryPoint = 'src/remotion/index.ts';
