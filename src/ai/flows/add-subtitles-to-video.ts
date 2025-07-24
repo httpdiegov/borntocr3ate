@@ -35,7 +35,8 @@ async function addSubtitles(input: AddSubtitlesInput): Promise<AddSubtitlesOutpu
 
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'remotion-render-'));
   const tempVideoFile = path.join(tempDir, 'input.mp4');
-  
+  const tempTranscriptionFile = path.join(tempDir, 'transcription.json');
+
   const videosDir = path.join(process.cwd(), 'videos');
   fs.mkdirSync(videosDir, { recursive: true });
   const outputPath = path.join(videosDir, outputFilename);
@@ -43,7 +44,7 @@ async function addSubtitles(input: AddSubtitlesInput): Promise<AddSubtitlesOutpu
   try {
     console.log(`Starting subtitle render for ${videoUrl}`);
     
-    // Download the video file to a temporary location
+    // 1. Download video and write transcription JSON to temp files
     console.log(`Downloading video from ${videoUrl} to ${tempVideoFile}`);
     const response = await fetch(videoUrl);
     if (!response.ok) throw new Error(`Failed to download video: ${response.statusText}`);
@@ -52,23 +53,25 @@ async function addSubtitles(input: AddSubtitlesInput): Promise<AddSubtitlesOutpu
     fs.writeFileSync(tempVideoFile, videoBuffer);
     console.log('Video downloaded successfully.');
 
-    // Get the actual duration of the downloaded video file using Remotion's prober
+    fs.writeFileSync(tempTranscriptionFile, JSON.stringify(transcription));
+    console.log(`Transcription file written to ${tempTranscriptionFile}`);
+
+    // 2. Get video duration
     const videoDurationInSeconds = await getAudioDurationInSeconds(tempVideoFile);
     if (isNaN(videoDurationInSeconds) || videoDurationInSeconds <= 0) {
         throw new Error("Could not determine video duration from file.");
     }
-
     const durationInFrames = Math.ceil(videoDurationInSeconds * 30); // Assuming 30 FPS
 
+    // 3. Prepare props for Remotion, passing file paths instead of raw data
     const inputProps = {
-      // Pass the local video file path to Remotion component
       videoPath: tempVideoFile,
-      transcription: transcription, // Pass transcription object directly
+      transcriptionPath: tempTranscriptionFile,
     };
     
     const propsString = JSON.stringify(inputProps).replace(/'/g, "'\\''");
 
-    // Command to render the video using Remotion CLI
+    // 4. Command to render the video using Remotion CLI
     const remotionRoot = path.join(process.cwd(), 'src', 'remotion', 'Root.tsx');
     
     const command = `npx remotion render ${remotionRoot} SubtitledClip ${outputPath} --props='${propsString}' --duration-in-frames=${durationInFrames} --gl=angle`;
@@ -92,7 +95,7 @@ async function addSubtitles(input: AddSubtitlesInput): Promise<AddSubtitlesOutpu
     const errorMessage = error.stderr ? error.stderr.toString() : error.message;
     return { success: false, message: `Render failed: ${errorMessage}` };
   } finally {
-    // Clean up temporary directory
+    // 5. Clean up temporary directory
     if (fs.existsSync(tempDir)) {
         fs.rmSync(tempDir, { recursive: true, force: true });
     }
