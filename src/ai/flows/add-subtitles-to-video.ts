@@ -32,10 +32,6 @@ export type AddSubtitlesOutput = z.infer<typeof AddSubtitlesOutputSchema>;
 async function addSubtitles(input: AddSubtitlesInput): Promise<AddSubtitlesOutput> {
   const { videoUrl, transcription, outputFilename } = input;
 
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'remotion-render-'));
-  const tempVideoFile = path.join(tempDir, 'input.mp4');
-  const tempTranscriptionFile = path.join(tempDir, 'transcription.json');
-
   const videosDir = path.join(process.cwd(), 'videos');
   fs.mkdirSync(videosDir, { recursive: true });
   const outputPath = path.join(videosDir, outputFilename);
@@ -43,37 +39,24 @@ async function addSubtitles(input: AddSubtitlesInput): Promise<AddSubtitlesOutpu
   try {
     console.log(`Starting subtitle render for ${videoUrl}`);
     
-    // 1. Download video and write transcription JSON to temp files
-    console.log(`Downloading video from ${videoUrl} to ${tempVideoFile}`);
-    const response = await fetch(videoUrl);
-    if (!response.ok) throw new Error(`Failed to download video: ${response.statusText}`);
-    // @ts-ignore
-    const videoBuffer = Buffer.from(await response.arrayBuffer());
-    fs.writeFileSync(tempVideoFile, videoBuffer);
-    console.log('Video downloaded successfully.');
-
-    fs.writeFileSync(tempTranscriptionFile, JSON.stringify(transcription));
-    console.log(`Transcription file written to ${tempTranscriptionFile}`);
-
-    // 2. Set a long duration and let Remotion stop when the video ends.
-    // This avoids calling getAudioDurationInSeconds in a server environment.
+    // Set a long duration and let Remotion stop when the video ends.
     const durationInFrames = 54000; // 30 minutes at 30 FPS, a safe upper limit.
 
-    // 3. Prepare props for Remotion, passing file paths instead of raw data
+    // Prepare props for Remotion, passing data directly
     const inputProps = {
-      videoPath: tempVideoFile,
-      transcriptionPath: tempTranscriptionFile,
+      videoUrl: videoUrl,
+      transcription: transcription,
     };
     
-    // Replace backslashes with forward slashes for cross-platform compatibility in the command
-    const propsString = JSON.stringify(inputProps).replace(/\\/g, '/');
+    // Escape the JSON string for the shell
+    const propsString = JSON.stringify(JSON.stringify(inputProps));
 
-    // 4. Command to render the video using Remotion CLI
+    // Command to render the video using Remotion CLI
     const entryPoint = 'src/remotion/index.ts';
     
-    const command = `npx remotion render ${entryPoint} SubtitledClip "${outputPath}" --props='${propsString}' --duration-in-frames=${durationInFrames} --chromium-sandbox=false --headless`;
+    const command = `npx remotion render ${entryPoint} SubtitledClip "${outputPath}" --props=${propsString} --duration-in-frames=${durationInFrames} --chromium-sandbox=false --headless`;
 
-    console.log('Executing Remotion command:', command);
+    console.log('Executing Remotion command...');
     execSync(command, { stdio: 'inherit' });
 
     if (!fs.existsSync(outputPath)) {
@@ -91,11 +74,6 @@ async function addSubtitles(input: AddSubtitlesInput): Promise<AddSubtitlesOutpu
     console.error('Failed to render video with Remotion:', error);
     const errorMessage = error.stderr ? error.stderr.toString() : error.message;
     return { success: false, message: `Render failed: ${errorMessage}` };
-  } finally {
-    // 5. Clean up temporary directory
-    if (fs.existsSync(tempDir)) {
-        fs.rmSync(tempDir, { recursive: true, force: true });
-    }
   }
 }
 
