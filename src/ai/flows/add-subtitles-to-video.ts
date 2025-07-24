@@ -12,7 +12,7 @@ import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { transcriptionSchema } from '../../remotion/schemas';
+import { Word, transcriptionSchema } from '../../remotion/schemas';
 import { getAudioDurationInSeconds } from 'remotion';
 
 
