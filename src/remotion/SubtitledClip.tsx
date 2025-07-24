@@ -1,3 +1,4 @@
+"use client";
 
 import { z } from 'zod';
 import { AbsoluteFill, Video, useCurrentFrame, useVideoConfig } from 'remotion';

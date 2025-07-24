@@ -1,3 +1,4 @@
+"use client";
 
 import { Composition, getInputProps } from 'remotion';
 import React from 'react';
