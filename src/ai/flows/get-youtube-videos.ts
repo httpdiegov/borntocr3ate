@@ -21,12 +21,33 @@ const VideoSchema = z.object({
   id: z.string(),
   title: z.string(),
   thumbnailUrl: z.string(),
+  duration: z.string().optional(),
 });
 
 const GetYoutubeVideosOutputSchema = z.object({
   videos: z.array(VideoSchema),
 });
 export type GetYoutubeVideosOutput = z.infer<typeof GetYoutubeVideosOutputSchema>;
+
+// Helper function to format ISO 8601 duration to MM:SS
+const formatDuration = (duration: string) => {
+    const match = duration.match(/PT(\d+H)?(\d+M)?(\d+S)?/);
+    if (!match) return '0:00';
+
+    const hours = (parseInt(match[1]) || 0);
+    const minutes = (parseInt(match[2]) || 0);
+    const seconds = (parseInt(match[3]) || 0);
+
+    const totalSeconds = hours * 3600 + minutes * 60 + seconds;
+    const finalMinutes = Math.floor(totalSeconds / 60);
+    const finalSeconds = totalSeconds % 60;
+    
+    if (hours > 0) {
+        return `${hours}:${String(finalMinutes).padStart(2, '0')}:${String(finalSeconds).padStart(2, '0')}`;
+    }
+
+    return `${finalMinutes}:${String(finalSeconds).padStart(2, '0')}`;
+};
 
 export async function getYoutubeVideos(input: GetYoutubeVideosInput): Promise<GetYoutubeVideosOutput> {
   const apiKey = await getApiKey({ service: 'youtube_api_key' });
@@ -35,22 +56,43 @@ export async function getYoutubeVideos(input: GetYoutubeVideosInput): Promise<Ge
   }
 
   const { channelId, maxResults } = input;
-  const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${channelId}&maxResults=${maxResults}&order=date&type=video&key=${apiKey}`;
+  const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${channelId}&maxResults=${maxResults}&order=date&type=video&key=${apiKey}`;
 
   try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      const errorData = await response.json();
+    const searchResponse = await fetch(searchUrl);
+    if (!searchResponse.ok) {
+      const errorData = await searchResponse.json();
+      console.error('YouTube API Error (Search):', errorData);
+      throw new Error(`YouTube API request failed: ${errorData.error.message}`);
+    }
+    const searchData = await searchResponse.json();
+    const videoIds = searchData.items.map((item: any) => item.id.videoId);
+
+    if (videoIds.length === 0) {
+      return { videos: [] };
+    }
+
+    // Fetch video details to get duration
+    const detailsUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails&id=${videoIds.join(',')}&key=${apiKey}`;
+    const detailsResponse = await fetch(detailsUrl);
+     if (!detailsResponse.ok) {
+      const errorData = await detailsResponse.json();
       console.error('YouTube API Error (Videos):', errorData);
       throw new Error(`YouTube API request failed: ${errorData.error.message}`);
     }
-    const data = await response.json();
+    const detailsData = await detailsResponse.json();
 
-    const videos = data.items.map((item: any) => ({
-      id: item.id.videoId,
-      title: item.snippet.title,
-      thumbnailUrl: item.snippet.thumbnails.high.url,
-    }));
+    const videosById = new Map(detailsData.items.map((item: any) => [item.id, item]));
+
+    const videos = searchData.items.map((item: any) => {
+        const videoDetails = videosById.get(item.id.videoId);
+        return {
+            id: item.id.videoId,
+            title: item.snippet.title,
+            thumbnailUrl: item.snippet.thumbnails.high.url,
+            duration: videoDetails ? formatDuration(videoDetails.contentDetails.duration) : undefined,
+        }
+    });
 
     return { videos };
   } catch (error: any) {
