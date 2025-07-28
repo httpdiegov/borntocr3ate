@@ -41,7 +41,7 @@ export default function CreatorStudioPage() {
 
           // Fetch videos using the channel ID from stats
           if (stats.id) {
-            const videoData = await getYoutubeVideos({ channelId: stats.id });
+            const videoData = await getYoutubeVideos({ channelId: stats.id, maxResults: 6 });
             setChannels((prev) => ({
               ...prev,
               [handle]: { ...prev[handle], videos: videoData.videos, loading: false },
