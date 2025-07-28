@@ -8,6 +8,7 @@ import { getYoutubeVideos, type GetYoutubeVideosOutput } from '@/ai/flows/get-yo
 import { ArrowLeft, Loader2, AlertTriangle, Youtube } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { Badge } from '@/components/ui/badge';
 
 const channelHandles = ['@CobrismoOOC', '@LaCobraaKick', '@DavooXeneizeTwitch', '@412-DomadasyBurradas', '@Puerroclips1234', '@lacobraxtra'];
 
@@ -134,13 +135,20 @@ export default function CreatorStudioPage() {
                         {videos.map((video) => (
                           <Link href={`https://www.youtube.com/watch?v=${video.id}`} target="_blank" rel="noopener noreferrer" key={video.id}>
                             <Card className="h-full flex flex-col hover:bg-accent transition-colors">
-                              <Image
-                                src={video.thumbnailUrl}
-                                alt={`Miniatura de ${video.title}`}
-                                width={1920}
-                                height={1080}
-                                className="aspect-video object-cover w-full rounded-t-lg"
-                              />
+                              <div className="relative">
+                                <Image
+                                  src={video.thumbnailUrl}
+                                  alt={`Miniatura de ${video.title}`}
+                                  width={1920}
+                                  height={1080}
+                                  className="aspect-video object-cover w-full rounded-t-lg"
+                                />
+                                {video.duration && (
+                                    <Badge variant="secondary" className="absolute bottom-2 right-2 bg-black/70 text-white">
+                                        {video.duration}
+                                    </Badge>
+                                )}
+                              </div>
                               <CardContent className="p-3 flex-grow">
                                 <p className="font-semibold text-sm line-clamp-2" title={video.title}>
                                   {video.title}
