@@ -17,6 +17,7 @@ const GetYoutubeStatsInputSchema = z.object({
 export type GetYoutubeStatsInput = z.infer<typeof GetYoutubeStatsInputSchema>;
 
 const GetYoutubeStatsOutputSchema = z.object({
+  id: z.string().describe('The ID of the channel.'),
   name: z.string().describe('The name of the channel.'),
   profilePicUrl: z.string().describe('The URL of the profile picture.'),
   subscriberCount: z.string().describe('The number of subscribers.'),
@@ -61,6 +62,7 @@ export async function getYoutubeStats(input: GetYoutubeStatsInput): Promise<GetY
     };
 
     return {
+      id: item.id,
       name: item.snippet.title,
       profilePicUrl: item.snippet.thumbnails.high.url,
       subscriberCount: formatNumber(item.statistics.subscriberCount),
