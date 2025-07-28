@@ -9,7 +9,7 @@ import { ArrowLeft, Loader2, AlertTriangle, Youtube } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 
-const channelHandles = ['@CobrismoOOC', '@DavooXeneizeRomanD10S'];
+const channelHandles = ['@CobrismoOOC', '@LaCobraaKick', '@DavooXeneizeTwitch'];
 
 type ChannelData = {
   stats: GetYoutubeStatsOutput | null;
