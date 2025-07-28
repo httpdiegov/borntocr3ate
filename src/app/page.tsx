@@ -1,8 +1,8 @@
 import ApiKeyManager from "@/components/dashboard/api-key-manager";
+import CreatorStudio from "@/components/dashboard/creator-studio";
 import Ideari from "@/components/dashboard/ideari";
 import NewsBrief from "@/components/dashboard/news-brief";
 import SocialNetworks from "@/components/dashboard/social-networks";
-import VideoClipper from "@/components/dashboard/video-clipper";
 
 export default function Home() {
   return (
@@ -20,7 +20,7 @@ export default function Home() {
           </div>
           <div className="xl:col-span-1 grid gap-6">
             <SocialNetworks />
-            <VideoClipper />
+            <CreatorStudio />
           </div>
           <div className="xl:col-span-1">
             <ApiKeyManager />
