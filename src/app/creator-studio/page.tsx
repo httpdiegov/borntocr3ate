@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -5,10 +6,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getYoutubeStats, type GetYoutubeStatsOutput } from '@/ai/flows/get-youtube-stats';
 import { getYoutubeVideos, type GetYoutubeVideosOutput } from '@/ai/flows/get-youtube-videos';
-import { ArrowLeft, Loader2, AlertTriangle, Youtube } from 'lucide-react';
+import { ArrowLeft, Loader2, AlertTriangle, Youtube, Copy, Check } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
+import { useToast } from '@/hooks/use-toast';
 
 const channelHandles = ['@CobrismoOOC', '@LaCobraaKick', '@DavooXeneizeTwitch', '@412-DomadasyBurradas', '@Puerroclips1234', '@lacobraxtra'];
 
@@ -28,19 +30,19 @@ export default function CreatorStudioPage() {
       ])
     )
   );
+  const [copiedVideoId, setCopiedVideoId] = useState<string | null>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     const fetchAllChannelData = async () => {
       for (const handle of channelHandles) {
         try {
-          // Fetch stats
           const stats = await getYoutubeStats({ channelHandle: handle });
           setChannels((prev) => ({
             ...prev,
             [handle]: { ...prev[handle], stats },
           }));
 
-          // Fetch videos using the channel ID from stats
           if (stats.id) {
             const videoData = await getYoutubeVideos({ channelId: stats.id, maxResults: 6 });
             setChannels((prev) => ({
@@ -61,6 +63,20 @@ export default function CreatorStudioPage() {
     };
     fetchAllChannelData();
   }, []);
+
+  const handleCopyLink = (videoId: string, event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const url = `https://www.youtube.com/watch?v=${videoId}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopiedVideoId(videoId);
+      toast({ title: '¡Enlace copiado!', description: 'El enlace del video ha sido copiado al portapapeles.' });
+      setTimeout(() => setCopiedVideoId(null), 2000);
+    }).catch(err => {
+      console.error('Failed to copy link: ', err);
+      toast({ title: 'Error', description: 'No se pudo copiar el enlace.', variant: 'destructive' });
+    });
+  };
 
   return (
     <div className="flex flex-col min-h-screen bg-background text-foreground">
@@ -133,7 +149,7 @@ export default function CreatorStudioPage() {
                       <h3 className="text-xl font-semibold mb-4">Últimos Videos</h3>
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                         {videos.map((video) => (
-                          <Link href={`https://www.youtube.com/watch?v=${video.id}`} target="_blank" rel="noopener noreferrer" key={video.id}>
+                          <Link href={`https://www.youtube.com/watch?v=${video.id}`} target="_blank" rel="noopener noreferrer" key={video.id} className="block group">
                             <Card className="h-full flex flex-col hover:bg-accent transition-colors">
                               <div className="relative">
                                 <Image
@@ -148,6 +164,15 @@ export default function CreatorStudioPage() {
                                         {video.duration}
                                     </Badge>
                                 )}
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="absolute top-2 right-2 h-8 w-8 bg-black/50 hover:bg-black/75 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                                  onClick={(e) => handleCopyLink(video.id, e)}
+                                >
+                                  {copiedVideoId === video.id ? <Check className="text-green-500" /> : <Copy />}
+                                  <span className="sr-only">Copiar enlace</span>
+                                </Button>
                               </div>
                               <CardContent className="p-3 flex-grow">
                                 <p className="font-semibold text-sm line-clamp-2" title={video.title}>
