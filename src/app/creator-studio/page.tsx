@@ -11,6 +11,14 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from "@/components/ui/carousel"
+
 
 const channelHandles = ['@CobrismoOOC', '@LaCobraaKick', '@DavooXeneizeTwitch', '@412-DomadasyBurradas', '@Puerroclips1234', '@lacobraxtra'];
 
@@ -44,7 +52,7 @@ export default function CreatorStudioPage() {
           }));
 
           if (stats.id) {
-            const videoData = await getYoutubeVideos({ channelId: stats.id, maxResults: 6 });
+            const videoData = await getYoutubeVideos({ channelId: stats.id, maxResults: 12 });
             setChannels((prev) => ({
               ...prev,
               [handle]: { ...prev[handle], videos: videoData.videos, loading: false },
@@ -147,42 +155,54 @@ export default function CreatorStudioPage() {
                   ) : videos && videos.length > 0 ? (
                     <div>
                       <h3 className="text-xl font-semibold mb-4">Últimos Videos</h3>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                        {videos.map((video) => (
-                          <Link href={`https://www.youtube.com/watch?v=${video.id}`} target="_blank" rel="noopener noreferrer" key={video.id} className="block group">
-                            <Card className="h-full flex flex-col hover:bg-accent transition-colors">
-                              <div className="relative">
-                                <Image
-                                  src={video.thumbnailUrl}
-                                  alt={`Miniatura de ${video.title}`}
-                                  width={1920}
-                                  height={1080}
-                                  className="aspect-video object-cover w-full rounded-t-lg"
-                                />
-                                {video.duration && (
-                                    <Badge variant="secondary" className="absolute bottom-2 right-2 bg-black/70 text-white">
-                                        {video.duration}
-                                    </Badge>
-                                )}
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="absolute top-2 right-2 h-8 w-8 bg-black/50 hover:bg-black/75 text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                                  onClick={(e) => handleCopyLink(video.id, e)}
-                                >
-                                  {copiedVideoId === video.id ? <Check className="text-green-500" /> : <Copy />}
-                                  <span className="sr-only">Copiar enlace</span>
-                                </Button>
-                              </div>
-                              <CardContent className="p-3 flex-grow">
-                                <p className="font-semibold text-sm line-clamp-2" title={video.title}>
-                                  {video.title}
-                                </p>
-                              </CardContent>
-                            </Card>
-                          </Link>
-                        ))}
-                      </div>
+                      <Carousel
+                        opts={{
+                          align: "start",
+                          loop: true,
+                        }}
+                        className="w-full"
+                      >
+                        <CarouselContent>
+                          {videos.map((video) => (
+                            <CarouselItem key={video.id} className="sm:basis-1/2 md:basis-1/3 lg:basis-1/4 xl:basis-1/6">
+                               <Link href={`https://www.youtube.com/watch?v=${video.id}`} target="_blank" rel="noopener noreferrer" className="block group h-full">
+                                <Card className="h-full flex flex-col hover:bg-accent transition-colors">
+                                  <div className="relative">
+                                    <Image
+                                      src={video.thumbnailUrl}
+                                      alt={`Miniatura de ${video.title}`}
+                                      width={1920}
+                                      height={1080}
+                                      className="aspect-video object-cover w-full rounded-t-lg"
+                                    />
+                                    {video.duration && (
+                                        <Badge variant="secondary" className="absolute bottom-2 right-2 bg-black/70 text-white">
+                                            {video.duration}
+                                        </Badge>
+                                    )}
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="absolute top-2 right-2 h-8 w-8 bg-black/50 hover:bg-black/75 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                                      onClick={(e) => handleCopyLink(video.id, e)}
+                                    >
+                                      {copiedVideoId === video.id ? <Check className="text-green-500" /> : <Copy />}
+                                      <span className="sr-only">Copiar enlace</span>
+                                    </Button>
+                                  </div>
+                                  <CardContent className="p-3 flex-grow">
+                                    <p className="font-semibold text-sm line-clamp-2" title={video.title}>
+                                      {video.title}
+                                    </p>
+                                  </CardContent>
+                                </Card>
+                              </Link>
+                            </CarouselItem>
+                          ))}
+                        </CarouselContent>
+                        <CarouselPrevious className="ml-12" />
+                        <CarouselNext className="mr-12" />
+                      </Carousel>
                     </div>
                   ) : (
                     <p className="text-muted-foreground text-center py-8">
