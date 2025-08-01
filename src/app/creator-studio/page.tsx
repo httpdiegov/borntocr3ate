@@ -158,7 +158,6 @@ export default function CreatorStudioPage() {
                       <Carousel
                         opts={{
                           align: "start",
-                          loop: true,
                         }}
                         className="w-full"
                       >
