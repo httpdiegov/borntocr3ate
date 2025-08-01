@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getYoutubeStats, type GetYoutubeStatsOutput } from '@/ai/flows/get-youtube-stats';
 import { getYoutubeVideos, type GetYoutubeVideosOutput } from '@/ai/flows/get-youtube-videos';
-import { ArrowLeft, Loader2, AlertTriangle, Youtube, Copy, Check } from 'lucide-react';
+import { ArrowLeft, Loader2, AlertTriangle, Youtube, Copy, Check, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
@@ -52,7 +52,7 @@ export default function CreatorStudioPage() {
           }));
 
           if (stats.id) {
-            const videoData = await getYoutubeVideos({ channelId: stats.id, maxResults: 12 });
+            const videoData = await getYoutubeVideos({ channelId: stats.id, maxResults: 20 });
             setChannels((prev) => ({
               ...prev,
               [handle]: { ...prev[handle], videos: videoData.videos, loading: false },
@@ -105,7 +105,7 @@ export default function CreatorStudioPage() {
 
             return (
               <Card key={handle} className="overflow-hidden">
-                <CardHeader>
+                <CardHeader className="flex-row items-center justify-between">
                   {loading ? (
                     <div className="flex items-center gap-4">
                       <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />
@@ -120,6 +120,7 @@ export default function CreatorStudioPage() {
                       <p>Error al cargar el canal: {handle}</p>
                     </div>
                   ) : stats ? (
+                    <>
                     <div className="flex items-center gap-4">
                       <Image
                         src={stats.profilePicUrl}
@@ -135,6 +136,13 @@ export default function CreatorStudioPage() {
                         <p className="text-muted-foreground">{handle}</p>
                       </div>
                     </div>
+                    <Button asChild variant="outline">
+                        <Link href={`/creator-studio/channel/${stats.id}`}>
+                           Ver Canal
+                           <ExternalLink className="ml-2 h-4 w-4"/>
+                        </Link>
+                    </Button>
+                    </>
                   ) : null}
                 </CardHeader>
                 <CardContent>
