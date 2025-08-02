@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/carousel"
 
 
-const channelHandles = ['@CobrismoOOC', '@LaCobraaKick', '@DavooXeneizeTwitch', '@412-DomadasyBurradas', '@Puerroclips1234', '@lacobraxtra', '@lacobrarandom'];
+const channelHandles = ['@CobrismoOOC', '@LaCobraaKick', '@DavooXeneizeTwitch', '@412-DomadasyBurradas', '@Puerroclips1234', '@lacobraxtra', '@lacobrarandom', '@Davovision07'];
 
 type ChannelData = {
   stats: GetYoutubeStatsOutput | null;
